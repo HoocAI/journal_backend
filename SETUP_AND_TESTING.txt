@@ -1,0 +1,74 @@
+Setup and Testing Guide
+=======================
+
+1. Prerequisites
+----------------
+- Node.js (v18 or higher recommended)
+- PostgreSQL (running locally or via Docker)
+- npm (Node Package Manager)
+
+2. Installation & Setup
+-----------------------
+1. **Clone the repository** (if not already done).
+
+2. **Install dependencies**:
+   ```bash
+   npm install
+   ```
+
+3. **Environment Configuration**:
+   - create a `.env` file in the root directory.
+   - Copy key values from `.env.example` (if available) or use the following template:
+
+   ```env
+   PORT=3000
+   DATABASE_URL="postgresql://user:password@localhost:5432/journal_db?schema=public"
+   JWT_SECRET="your-super-secret-jwt-key"
+   JWT_REFRESH_SECRET="your-super-secret-refresh-key"
+   # Add other keys as needed for external services (e.g., AWS S3, etc.)
+   ```
+
+4. **Database Setup**:
+   - Ensure your PostgreSQL server is running.
+   - Run Prisma migrations to create tables:
+     ```bash
+     npx prisma migrate dev --name init
+     ```
+   - (Optional) Seed the database if a seed script exists:
+     ```bash
+     npx prisma db seed
+     ```
+
+5. **Start the Development Server**:
+   ```bash
+   npm run dev
+   ```
+   The server should start on `http://localhost:3000`.
+
+3. API Testing
+--------------
+### Manual Testing (Postman / Thunder Client)
+1. **Import the API collection** (if provided) or create requests manually using the `api_docs.txt` reference.
+2. **Authentication Flow**:
+   - First, make a `POST` request to `/api/v1/auth/signup` or `login`.
+   - Copy the `accessToken` from the response.
+   - For subsequent requests to protected routes (e.g., `/api/v1/journal`), go to the **Auth** tab.
+   - Select **Bearer Token**.
+   - Paste your `accessToken`.
+3. **Testing File Uploads**:
+   - Use `POST` requests with `Body` type `form-data`.
+   - Add fields like `photo` or `audio` and select Type as `File` to upload sample files.
+
+### Automated Testing
+This project includes basic API tests using Jest and Supertest.
+
+1. **Run Tests**:
+   ```bash
+   npm test
+   ```
+   This will execute the test suite in `tests/`.
+
+2. **Test Scope**:
+   - Health Check: Verifies the server is up.
+   - Auth: Verifies signup/login functionality.
+

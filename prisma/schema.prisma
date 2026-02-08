@@ -1,0 +1,209 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+
+generator client {
+  provider = "prisma-client-js"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  USER
+  ADMIN
+}
+
+enum Plan {
+  FREE
+  TRIAL
+  PREMIUM
+}
+
+enum MoodType {
+  VERY_BAD
+  BAD
+  NEUTRAL
+  GOOD
+  VERY_GOOD
+  // Floral App Moods
+  JOYFUL
+  EXCITED
+  PROUD
+  GRATEFUL
+  PEACEFUL
+  CONTENT
+  PLAYFUL
+  HOPEFUL
+  CURIOUS
+  SAD
+  DEPRESSED
+  LONELY
+  HURT
+  DISAPPOINTED
+  ANGRY
+  FRUSTRATED
+  ANNOYED
+  ANXIOUS
+  OVERWHELMED
+  STRESSED
+  NERVOUS
+  INSECURE
+  TIRED
+  BORED
+  NUMB
+  GUILTY
+  ASHAMED
+}
+
+model User {
+  id           String @id @default(uuid())
+  email        String @unique
+  phone        String? @unique
+  passwordHash String
+  role         Role   @default(USER)
+
+  // Profile Details
+  name     String?
+  age      Int?
+  language String?
+  timezone String?
+  focus    String[]
+
+  plan        Plan      @default(TRIAL)
+  trialEndsAt DateTime?
+  isActive    Boolean   @default(true)
+
+  onboardingCompleted Boolean @default(false)
+  goalsSet            Boolean @default(false)
+  isEmailVerified     Boolean @default(false)
+  isPhoneVerified     Boolean @default(false)
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  sessions       Session[]
+  consent        Consent?
+  journalEntries JournalEntry[]
+  moods          MoodEntry[]
+  answers        QuestionAnswer[]
+  goals          Goal[]
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  refreshToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Consent {
+  id     String @id @default(uuid())
+  userId String @unique
+
+  termsAccepted     Boolean
+  privacyAccepted   Boolean
+  recordingAccepted Boolean @default(false)
+
+  acceptedAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model JournalEntry {
+  id       String  @id @default(uuid())
+  userId   String
+  content  String
+  photoUrl String?
+  audioUrl String?
+
+  entryDate DateTime
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entryDate])
+}
+
+model MoodEntry {
+  id        String   @id @default(uuid())
+  userId    String
+  mood      MoodType
+  reason    String?
+  entryDate DateTime // Still using entryDate for indexing, but can be multiple per day if we change unique constraint
+
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, entryDate])
+}
+
+model Goal {
+  id      String @id @default(uuid())
+  userId  String
+  type    String // longTerm, shortTerm, yearly, monthly, daily
+  content String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model QuestionSet {
+  id        String   @id @default(uuid())
+  title     String
+  startDate DateTime
+  createdAt DateTime @default(now())
+
+  questions Question[]
+}
+
+model Question {
+  id            String @id @default(uuid())
+  questionSetId String
+  text          String
+  order         Int
+
+  questionSet QuestionSet      @relation(fields: [questionSetId], references: [id])
+  answers     QuestionAnswer[]
+
+  @@unique([questionSetId, order])
+}
+
+model QuestionAnswer {
+  id         String   @id @default(uuid())
+  userId     String
+  questionId String
+  answer     String
+  answerDate DateTime
+
+  createdAt DateTime @default(now())
+
+  user     User     @relation(fields: [userId], references: [id])
+  question Question @relation(fields: [questionId], references: [id])
+
+  @@unique([userId, answerDate]) // one answer per day
+}
+
+model AdminAudio {
+  id        String   @id @default(uuid())
+  title     String
+  audioUrl  String
+  createdAt DateTime @default(now())
+}

@@ -1,0 +1,239 @@
+API Documentation - Journal Backend
+===================================
+
+1. Overview
+-----------
+This is the backend API for the Wellness/Journal application. It provides endpoints for user authentication, journaling, mood tracking, daily questions, and administrative functions.
+
+Base URL: http://localhost:3000/api/v1 (default)
+
+2. Authentication & Authorization
+---------------------------------
+The API uses Bearer Token authentication.
+- **Header**: `Authorization: Bearer <access_token>`
+- **Tokens**: Access tokens are JWTs. Refresh tokens are used to obtain new access tokens.
+- **Sessions**: Managed via the `Session` database model. Logging out invalidates the session.
+
+### User Roles
+The application has two primary user roles defined in the `Role` enum:
+1. **USER**: The standard role for app users. Can access their own data (journals, moods, etc.).
+2. **ADMIN**: Administrative role. Can manage users, question sets, and audio content.
+
+### Subscription Plans
+Users can have one of the following plans (`Plan` enum):
+- **FREE**: Basic access.
+- **TRIAL**: Limited time premium access (checked via `trialEndsAt`).
+- **PREMIUM**: Full access.
+
+3. API Endpoints
+----------------
+
+### 3.1 Authentication
+**Base Path**: `/auth`
+
+- **POST /signup**
+  - **Description**: Register a new user.
+  - **Access**: Public
+  - **Body**:
+    ```json
+    {
+      "email": "user@example.com",
+      "phone": "+1234567890", // Optional
+      "password": "password123",
+      "termsAccepted": true,
+      "privacyAccepted": true,
+      "recordingAccepted": true
+    }
+    ```
+  - **Response**: `{ accessToken, refreshToken, expiresIn, tokenType }`
+
+- **POST /login**
+  - **Description**: Login an existing user (Email or Phone).
+  - **Access**: Public
+  - **Body**: `{ "email": "...", "password": "..." }`
+  - **Response**: `{ accessToken, refreshToken, ... }`
+
+- **POST /refresh**
+  - **Description**: Get a new access token using a refresh token.
+  - **Access**: Public
+  - **Body**: `{ "refreshToken": "..." }`
+  - **Response**: `{ accessToken, refreshToken, ... }`
+
+- **POST /logout**
+  - **Description**: Invalidate the current session.
+  - **Access**: Authenticated (Bearer Token)
+  - **Body**: `{ "sessionId": "..." }`
+  - **Response**: `{ "message": "Logged out successfully" }`
+
+- **POST /admin/login**
+  - **Description**: Login for admin users.
+  - **Access**: Public
+  - **Body**: `{ "email": "...", "password": "..." }`
+  - **Response**: `{ accessToken, refreshToken, ... }`
+
+### 3.2 User Profile
+**Base Path**: `/users`
+**Access**: Authenticated (`USER` or `ADMIN`)
+
+- **GET /profile**
+  - **Description**: Get current user's profile details.
+  - **Response**: User object (name, age, language, timezone, focus, etc.).
+
+- **PATCH /profile**
+  - **Description**: Update user profile details.
+  - **Body**:
+    ```json
+    {
+      "name": "Jane Doe",
+      "age": 28,
+      "language": "English",
+      "timezone": "UTC+5:30",
+      "focus": ["Inner Peace 🕊️", "Self Growth 🌱"]
+    }
+    ```
+  - **Response**: Updated user object.
+
+### 3.3 Goals (Rituals & Visions)
+**Base Path**: `/goals`
+**Access**: Authenticated (`USER` or `ADMIN`)
+
+- **POST /**
+  - **Description**: Create a new goal.
+  - **Body**: `{ "type": "longTerm", "content": "..." }` // types: longTerm, shortTerm, yearly, monthly, daily
+  - **Response**: Created goal object.
+
+- **GET /me**
+  - **Description**: Get all goals for the current user.
+  - **Response**: Array of goal objects.
+
+- **PATCH /:id**
+  - **Description**: Update a specific goal's content.
+  - **Body**: `{ "content": "Updated content..." }`
+  - **Response**: Updated goal object.
+
+- **DELETE /:id**
+  - **Description**: Delete a goal.
+  - **Response**: 204 No Content.
+
+### 3.4 Journal
+**Base Path**: `/journal`
+**Access**: Authenticated (`USER` or `ADMIN`)
+
+- **POST /**
+  - **Description**: Create a journal entry. Supports file uploads.
+  - **Format**: `multipart/form-data`
+  - **Fields**:
+    - `content` (text)
+    - `photo` (file, optional)
+    - `audio` (file, optional)
+  - **Response**: Created entry object.
+
+- **GET /me**
+  - **Description**: Get all journal entries for the current user.
+  - **Response**: Array of journal entries.
+
+### 3.5 Mood
+**Base Path**: `/mood`
+**Access**: Authenticated (`USER` or `ADMIN`)
+
+- **POST /**
+  - **Description**: Log a mood entry. **Multiple entries per day are allowed.**
+  - **Body**:
+    ```json
+    {
+      "mood": "JOYFUL", // See full list below
+      "reason": "Optional reason"
+    }
+    ```
+  - **Response**: Created mood entry.
+
+- **GET /me**
+  - **Description**: Get all mood entries for the current user.
+  - **Response**: Array of mood entries.
+
+#### Valid Mood Types:
+- **Positive**: JOYFUL, EXCITED, PROUD, GRATEFUL, PEACEFUL, CONTENT, PLAYFUL, HOPEFUL, CURIOUS
+- **Negative**: SAD, DEPRESSED, LONELY, HURT, DISAPPOINTED, ANGRY, FRUSTRATED, ANNOYED, ANXIOUS, OVERWHELMED, STRESSED, NERVOUS, INSECURE
+- **Neutral/Other**: VERY_BAD, BAD, NEUTRAL, GOOD, VERY_GOOD, TIRED, BORED, NUMB, GUILTY, ASHAMED
+
+### 3.6 Questions / Daily Prompt
+**Base Path**: `/questions`
+**Access**: Authenticated (`USER` or `ADMIN`)
+
+- **GET /today**
+  - **Description**: Get the daily question for the user.
+  - **Response**: Question object.
+
+- **POST /today**
+  - **Description**: Submit an answer to the daily question.
+  - **Body**: `{ "answer": "My answer..." }`
+  - **Response**: Created answer object.
+
+- **GET /history**
+  - **Description**: Get answer history.
+  - **Query Params**: `limit`, `offset`
+  - **Response**: Historic answers.
+
+### 3.7 Audio (User)
+**Base Path**: `/audio`
+**Access**: Authenticated (`USER` or `ADMIN`)
+
+- **GET /**
+  - **Description**: List all available audio content.
+  - **Response**: Array of audio objects.
+
+- **GET /:id**
+  - **Description**: Get details of a specific audio file.
+  - **Response**: Audio object.
+
+### 3.8 Admin
+**Base Path**: `/admin`
+**Access**: Authenticated AND `Role: ADMIN`
+
+- **POST /question**
+  - **Description**: Create a new question set (7 questions).
+  - **Body**: `{ "title": "...", "startDate": "YYYY-MM-DD", "questions": [ { "text": "...", "order": 0 }, ... ] }`
+
+- **GET /question/sets**
+  - **Description**: List all question sets.
+
+- **GET /users**
+  - **Description**: Get a list of all users.
+
+- **GET /users/:userId/daily**
+  - **Description**: Get daily data (journal, mood, answers) for a specific user.
+
+- **PATCH /users/:userId/disable**
+  - **Description**: Disable a user account.
+
+- **PATCH /users/:userId/enable**
+  - **Description**: Enable a user account.
+
+- **POST /audio**
+  - **Description**: Upload new audio content for users.
+  - **Format**: `multipart/form-data`
+  - **Fields**: `title` (text), `audio` (file).
+
+- **GET /audio**
+  - **Description**: List all audio content (admin view).
+
+4. Error Handling
+-----------------
+Errors are returned in JSON format:
+```json
+{
+  "code": "ERROR_CODE", // e.g., INTERNAL_ERROR, UNAUTHORIZED, VALIDATION_ERROR
+  "message": "Human readable message",
+  "requestId": "uuid",
+  "timestamp": "ISO string"
+}
+```
+Common Status Codes:
+- 200: OK
+- 201: Created
+- 400: Bad Request (Validation failed)
+- 401: Unauthorized (Invalid token)
+- 403: Forbidden (Insufficient role)
+- 404: Not Found
+- 500: Internal Server Error
+
