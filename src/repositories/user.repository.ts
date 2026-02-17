@@ -1,5 +1,5 @@
 import { prisma } from '../lib/prisma';
-import { Plan, Role } from '../../generated/prisma';
+import { Plan, Role } from '@prisma/client';
 
 export interface UserData {
     id: string;

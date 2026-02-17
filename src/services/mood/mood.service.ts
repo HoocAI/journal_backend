@@ -1,4 +1,4 @@
-import { MoodType } from '../../../generated/prisma';
+import { MoodType } from '@prisma/client';
 import { ConflictError } from '../../utils/errors';
 import { moodRepository } from '../../repositories/mood.repository';
 

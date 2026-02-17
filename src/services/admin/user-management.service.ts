@@ -4,8 +4,8 @@ import { journalRepository } from '../../repositories/journal.repository';
 import { moodRepository } from '../../repositories/mood.repository';
 import { questionRepository } from '../../repositories/question.repository';
 import { NotFoundError, ForbiddenError } from '../../utils/errors';
-import type { MoodType, Plan } from '../../../generated/prisma';
-import { Role } from '../../../generated/prisma';
+import type { MoodType, Plan } from '@prisma/client';
+import { Role } from '@prisma/client';
 
 export interface MoodAggregation {
     VERY_BAD: number;

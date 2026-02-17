@@ -1,4 +1,4 @@
-import { MoodType } from '../../generated/prisma';
+import { MoodType } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 
 export const moodRepository = {
