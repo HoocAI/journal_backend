@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { authService, adminAuthService } from '../services/auth';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ValidationError, AppError } from '../utils/errors';
+import { requireAuth } from '../middleware/auth.middleware';
 
 const router = Router();
 
@@ -132,6 +133,30 @@ router.post(
 
         const { phone, otp } = parseResult.data;
         const tokenPair = await authService.phoneLogin(phone, otp);
+
+        res.status(200).json({
+            accessToken: tokenPair.accessToken,
+            refreshToken: tokenPair.refreshToken,
+            expiresIn: tokenPair.expiresIn,
+            tokenType: 'Bearer',
+        });
+    })
+);
+
+router.post(
+    '/verify-phone',
+    requireAuth,
+    asyncHandler(async (req: Request, res: Response) => {
+        const parseResult = phoneLoginSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const { phone, otp } = parseResult.data;
+        // req.user is set by requireAuth
+        const userId = (req as any).user.userId;
+
+        const tokenPair = await authService.verifyPhone(userId, phone, otp);
 
         res.status(200).json({
             accessToken: tokenPair.accessToken,

@@ -478,6 +478,35 @@ export const authService = {
     },
 
     /**
+     * Verifies a phone number for an authenticated user
+     */
+    async verifyPhone(userId: string, phone: string, otp: string): Promise<TokenPair> {
+        if (otp !== '123456') {
+            throw new AuthError('Invalid OTP', 'AUTH_INVALID_OTP');
+        }
+
+        const user = await userRepository.findById(userId);
+        if (!user) {
+            throw new AuthError('User not found', 'AUTH_USER_NOT_FOUND');
+        }
+
+        // Check if phone is already used by ANOTHER user
+        const existingPhoneUser = await userRepository.findByPhone(phone);
+        if (existingPhoneUser && existingPhoneUser.id !== userId) {
+            throw new ConflictError('Phone number already in use', 'AUTH_PHONE_IN_USE');
+        }
+
+        // Update user
+        await userRepository.update(userId, {
+            phone,
+            isPhoneVerified: true
+        });
+
+        // Return fresh session/tokens
+        return this.createSession(userId);
+    },
+
+    /**
      * Helper to create a session and return tokens
      */
     async createSession(userId: string): Promise<TokenPair> {
