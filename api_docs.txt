@@ -31,45 +31,85 @@ Users can have one of the following plans (`Plan` enum):
 ### 3.1 Authentication
 **Base Path**: `/auth`
 
+#### Token Management
+- **Access Token**: Short-lived JWT (default 15 mins). Must be sent in the `Authorization` header: `Bearer <token>`.
+- **Refresh Token**: Long-lived JWT (default 7 days). Used to obtain new access tokens when they expire.
+
+#### Endpoints
+
 - **POST /signup**
-  - **Description**: Register a new user.
-  - **Access**: Public
+  - **Description**: Register a new user with email and password.
   - **Body**:
     ```json
     {
       "email": "user@example.com",
+      "password": "strongPassword123",
       "phone": "+1234567890", // Optional
-      "password": "password123",
       "termsAccepted": true,
       "privacyAccepted": true,
       "recordingAccepted": true
     }
     ```
-  - **Response**: `{ accessToken, refreshToken, expiresIn, tokenType }`
+  - **Response**:
+    ```json
+    {
+      "accessToken": "ey...",
+      "refreshToken": "ey...",
+      "expiresIn": 900,
+      "tokenType": "Bearer",
+      "user": { ... }
+    }
+    ```
 
 - **POST /login**
-  - **Description**: Login an existing user (Email or Phone).
-  - **Access**: Public
-  - **Body**: `{ "email": "...", "password": "..." }`
-  - **Response**: `{ accessToken, refreshToken, ... }`
+  - **Description**: Login with email and password.
+  - **Body**: `{ "email": "user@example.com", "password": "password" }`
+  - **Response**: Same as signup.
+
+- **POST /google**
+  - **Description**: Login/Signup using Google OAuth ID Token.
+  - **For Flutter**: Use `google_sign_in` package to get the `idToken` from the user's Google account and send it here.
+  - **Body**:
+    ```json
+    {
+      "idToken": "eyJhb..." // ID Token received from Google
+    }
+    ```
+  - **Response**: Same as signup. Accounts are automatically created if they don't exist.
+
+- **POST /phone**
+  - **Description**: Login/Signup using Phone number and OTP.
+  - **Note**: Currently using mock OTP `123456` for development.
+  - **Body**:
+    ```json
+    {
+      "phone": "+1234567890",
+      "otp": "123456"
+    }
+    ```
+  - **Response**: Same as signup.
 
 - **POST /refresh**
-  - **Description**: Get a new access token using a refresh token.
-  - **Access**: Public
+  - **Description**: Get a new access token. Call this when you receive a 401 Unauthorized error.
   - **Body**: `{ "refreshToken": "..." }`
-  - **Response**: `{ accessToken, refreshToken, ... }`
+  - **Response**: New pair of `{ accessToken, refreshToken, ... }`. **Note**: Determine if the refresh token is also rotated (new one returned). Yes, it is. Update your storage with the new refresh token.
+
+- **POST /verify-phone**
+  - **Description**: Link/Verify a phone number for an authenticated user.
+  - **Access**: Authenticated
+  - **Body**: `{ "phone": "+1...", "otp": "..." }`
+  - **Response**: New token pair.
 
 - **POST /logout**
-  - **Description**: Invalidate the current session.
-  - **Access**: Authenticated (Bearer Token)
-  - **Body**: `{ "sessionId": "..." }`
+  - **Description**: Invalidate the specific session.
+  - **Access**: Authenticated
+  - **Body**: `{ "sessionId": "..." }` // Get sessionId from the decoded access token if needed, or track it on client.
   - **Response**: `{ "message": "Logged out successfully" }`
 
 - **POST /admin/login**
   - **Description**: Login for admin users.
-  - **Access**: Public
-  - **Body**: `{ "email": "...", "password": "..." }`
-  - **Response**: `{ accessToken, refreshToken, ... }`
+  - **Body**: `{ "email": "admin@example.com", "password": "..." }`
+  - **Response**: Same as standard login.
 
 ### 3.2 User Profile
 **Base Path**: `/users`

@@ -1,2 +1,2 @@
-export { requireAuth, requirePremium } from './auth.middleware';
+export { requireAuth, requirePremium, requireProvisionalAuth } from './auth.middleware';
 export { requireAdmin } from './admin.middleware';

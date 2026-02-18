@@ -1,5 +1,5 @@
 import { Request, Response, NextFunction } from 'express';
-import { validateAccessToken } from '../services/auth/token.utils';
+import { validateAccessToken, validateProvisionalToken } from '../services/auth/token.utils';
 import { AuthError, ForbiddenError } from '../utils/errors';
 import { prisma } from '../lib/prisma';
 import type { TokenPayload } from '../types';
@@ -72,6 +72,31 @@ export function requirePremium() {
             }
 
             req.user.isPremiumActive = true;
+            next();
+        } catch (error) {
+            next(error);
+        }
+    };
+}
+
+/**
+ * Middleware that requires a valid provisional token (Step 1 of 2-step signup)
+ * Only accepts tokens of type 'provisional' — full access tokens are rejected.
+ * Used exclusively by the verify-phone route.
+ */
+export function requireProvisionalAuth() {
+    return async (req: Request, _res: Response, next: NextFunction): Promise<void> => {
+        try {
+            const authHeader = req.headers.authorization;
+            if (!authHeader?.startsWith('Bearer ')) {
+                throw new AuthError('Provisional token required', 'AUTH_TOKEN_REQUIRED');
+            }
+
+            const token = authHeader.substring(7);
+            const payload = validateProvisionalToken(token);
+
+            // Attach userId so the route handler can use it
+            req.user = { userId: payload.userId, sessionId: '', isPremium: false, exp: 0 };
             next();
         } catch (error) {
             next(error);

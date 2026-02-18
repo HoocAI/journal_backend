@@ -3,6 +3,10 @@ import crypto from 'crypto';
 import { AuthError } from '../../utils/errors';
 import type { TokenPayload, AdminTokenPayload, AdminRole } from '../../types';
 
+export interface ProvisionalTokenPayload {
+    userId: string;
+}
+
 // Configuration - these will be loaded from env in production
 const ACCESS_TOKEN_SECRET: string = process.env.JWT_ACCESS_SECRET ?? 'dev-access-secret-key-min-32-chars!!';
 const REFRESH_TOKEN_SECRET: string = process.env.JWT_REFRESH_SECRET ?? 'dev-refresh-secret-key-min-32-chars!';
@@ -116,6 +120,52 @@ export function generateRefreshToken(payload: {
 }
 
 /**
+ * Generates a provisional token after Google OAuth (Step 1 of 2-step signup)
+ * This token is only valid for the verify-phone endpoint.
+ */
+export function generateProvisionalToken(payload: { userId: string }): string {
+    const options: SignOptions = {
+        expiresIn: 600, // 10 minutes
+        algorithm: 'HS256',
+    };
+
+    return jwt.sign(
+        {
+            userId: payload.userId,
+            type: 'provisional',
+        },
+        ACCESS_TOKEN_SECRET,
+        options
+    );
+}
+
+/**
+ * Validates and decodes a provisional token
+ */
+export function validateProvisionalToken(token: string): ProvisionalTokenPayload {
+    try {
+        const decoded = jwt.verify(token, ACCESS_TOKEN_SECRET) as JwtPayload & {
+            userId: string;
+            type: string;
+        };
+
+        if (decoded.type !== 'provisional') {
+            throw new AuthError('Invalid provisional token', 'AUTH_INVALID_TOKEN');
+        }
+
+        return { userId: decoded.userId };
+    } catch (error) {
+        if (error instanceof jwt.TokenExpiredError) {
+            throw new AuthError('Provisional token expired. Please restart signup.', 'AUTH_TOKEN_EXPIRED');
+        }
+        if (error instanceof jwt.JsonWebTokenError) {
+            throw AuthError.tokenInvalid();
+        }
+        throw error;
+    }
+}
+
+/**
  * Validates and decodes an access token
  */
 export function validateAccessToken(token: string): TokenPayload {
@@ -127,6 +177,7 @@ export function validateAccessToken(token: string): TokenPayload {
             type: string;
         };
 
+        // Explicitly reject provisional tokens — they cannot access protected routes
         if (decoded.type !== 'access' && decoded.type !== 'admin_access') {
             throw AuthError.tokenInvalid();
         }
