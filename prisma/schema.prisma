@@ -206,3 +206,11 @@ model AdminAudio {
   audioUrl  String
   createdAt DateTime @default(now())
 }
+
+model Quote {
+  id        String   @id @default(uuid())
+  text      String
+  author    String?
+  mood      MoodType
+  createdAt DateTime @default(now())
+}

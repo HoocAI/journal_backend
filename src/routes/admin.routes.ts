@@ -162,4 +162,62 @@ function handleMulterError(err: Error, _req: Request, _res: Response, next: Next
 
 router.use(handleMulterError);
 
+// ─── Quotes ───────────────────────────────────────────────────────────────────
+
+const createQuoteSchema = z.object({
+    text: z.string().min(1, 'Quote text is required'),
+    author: z.string().optional(),
+    mood: z.enum([
+        'VERY_BAD', 'BAD', 'NEUTRAL', 'GOOD', 'VERY_GOOD',
+        'JOYFUL', 'EXCITED', 'PROUD', 'GRATEFUL', 'PEACEFUL', 'CONTENT', 'PLAYFUL', 'HOPEFUL', 'CURIOUS',
+        'SAD', 'DEPRESSED', 'LONELY', 'HURT', 'DISAPPOINTED',
+        'ANGRY', 'FRUSTRATED', 'ANNOYED', 'ANXIOUS', 'OVERWHELMED', 'STRESSED', 'NERVOUS', 'INSECURE',
+        'TIRED', 'BORED', 'NUMB', 'GUILTY', 'ASHAMED'
+    ]),
+});
+
+const quoteIdSchema = z.object({
+    id: z.string().uuid('Invalid quote ID'),
+});
+
+import { quoteService } from '../services/admin/quote.service';
+
+// POST /api/v1/admin/quotes - Create a new quote
+router.post(
+    '/quotes',
+    asyncHandler(async (req: Request, res: Response) => {
+        const parseResult = createQuoteSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const quote = await quoteService.createQuote(parseResult.data);
+        res.status(201).json(quote);
+    })
+);
+
+// GET /api/v1/admin/quotes - List all quotes (optional: ?mood=JOYFUL)
+router.get(
+    '/quotes',
+    asyncHandler(async (req: Request, res: Response) => {
+        const mood = req.query.mood as any; // Type casting for simplicity, service handles logic
+        const quotes = await quoteService.getQuotes(mood);
+        res.status(200).json(quotes);
+    })
+);
+
+// DELETE /api/v1/admin/quotes/:id - Delete a quote
+router.delete(
+    '/quotes/:id',
+    asyncHandler(async (req: Request, res: Response) => {
+        const parseResult = quoteIdSchema.safeParse(req.params);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        await quoteService.deleteQuote(parseResult.data.id);
+        res.status(204).send();
+    })
+);
+
 export { router as adminRouter };

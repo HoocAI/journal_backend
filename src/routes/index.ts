@@ -7,4 +7,5 @@ export { audioRouter } from './audio.routes';
 export { goalRouter } from './goal.routes';
 export { userRouter } from './user.routes';
 export { visionBoardRouter } from './vision-board.routes';
+export { quoteRouter } from './quote.routes';
 

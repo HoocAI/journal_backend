@@ -40,7 +40,7 @@ export const authService = {
      * and returns a short-lived provisional token.
      * No session is created yet.
      */
-    async googleLogin(idToken: string): Promise<ProvisionalResponse> {
+    async googleLogin(idToken: string): Promise<ProvisionalResponse | TokenPair> {
         if (!GOOGLE_CLIENT_ID) {
             throw new AuthError('Google Client ID not configured', 'AUTH_CONFIG_ERROR', 500);
         }
@@ -103,6 +103,11 @@ export const authService = {
             }
         }
 
+        // If user is already phone verified, log them in directly
+        if (user.isPhoneVerified) {
+            return this.createSession(user.id);
+        }
+
         const provisionalToken = generateProvisionalToken({ userId: user.id });
 
         return {
@@ -113,7 +118,51 @@ export const authService = {
     },
 
     /**
-     * STEP 2 — Phone OTP Verification
+     * Request OTP for Phone Login
+     */
+    async requestPhoneLogin(phone: string): Promise<{ message: string; requiresSignup: boolean }> {
+        const user = await userRepository.findByPhone(phone);
+
+        // Ensure user exists for login
+        // If you want to support phone-only SIGNUP, this logic needs to change.
+        // For now, assuming "Login" implies existing user.
+        if (!user) {
+            throw new AuthError('User not found with this phone number', 'AUTH_USER_NOT_FOUND');
+        }
+
+        // Generate OTP (Mock for now)
+        // In real app: generate random 6-digit, store in Redis/DB with expiry, send via SMS
+        console.log(`[DEV] OTP for ${phone}: 123456`);
+
+        return {
+            message: 'OTP sent successfully',
+            requiresSignup: false,
+        };
+    },
+
+    /**
+     * Verify OTP and Login with Phone
+     */
+    async verifyPhoneLogin(phone: string, otp: string): Promise<TokenPair> {
+        // Dev: mock OTP
+        if (otp !== '123456') {
+            throw new AuthError('Invalid OTP', 'AUTH_INVALID_OTP');
+        }
+
+        const user = await userRepository.findByPhone(phone);
+        if (!user) {
+            throw new AuthError('User not found', 'AUTH_USER_NOT_FOUND');
+        }
+
+        if (!user.isActive) {
+            throw new AuthError('Account is deactivated', 'AUTH_ACCOUNT_DEACTIVATED');
+        }
+
+        return this.createSession(user.id);
+    },
+
+    /**
+     * STEP 2 — Phone OTP Verification (Signup Flow)
      * Requires a valid provisional token (enforced by requireProvisionalAuth middleware).
      * Verifies the OTP, links the phone number, and creates a full session.
      */

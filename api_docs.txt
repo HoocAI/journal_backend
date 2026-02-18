@@ -37,17 +37,45 @@ Users can have one of the following plans (`Plan` enum):
 
 #### Endpoints
 
-- **POST /signup**
-  - **Description**: Register a new user with email and password.
+- **POST /google** (Login or Signup)
+  - **Description**: Universal Google entry point.
+  - **Body**: `{ "idToken": "..." }`
+  - **Response (Scenario A: New/Unverified User)**:
+    ```json
+    {
+      "provisionalToken": "ey...",
+      "requiresPhoneVerification": true,
+      "message": "Please verify phone number to complete signup."
+    }
+    ```
+  - **Response (Scenario B: Existing Verified User)**:
+    ```json
+    {
+      "accessToken": "ey...",
+      "refreshToken": "ey...",
+      "user": { ... }, // Full login success
+      "requiresPhoneVerification": false
+    }
+    ```
+
+- **POST /login/phone/initiate** (Phone Login Step 1)
+  - **Description**: Request OTP for phone-only login.
+  - **Body**: `{ "phone": "+1234567890" }`
+  - **Response**: `{ "message": "OTP sent successfully" }`
+
+- **POST /login/phone/verify** (Phone Login Step 2)
+  - **Description**: Verify OTP and login.
+  - **Body**: `{ "phone": "+1234567890", "otp": "123456" }`
+  - **Response**: Full TokenPair (accessToken, refreshToken, etc).
+
+- **POST /verify-phone** (Signup Step 2)
+  - **Description**: Verify OTP and link phone number. Completes the authentication process.
+  - **Header**: `Authorization: Bearer <provisionalToken>` (from Step 1)
   - **Body**:
     ```json
     {
-      "email": "user@example.com",
-      "password": "strongPassword123",
-      "phone": "+1234567890", // Optional
-      "termsAccepted": true,
-      "privacyAccepted": true,
-      "recordingAccepted": true
+      "phone": "+1234567890",
+      "otp": "123456" // Use 123456 for dev/test
     }
     ```
   - **Response**:
@@ -61,55 +89,21 @@ Users can have one of the following plans (`Plan` enum):
     }
     ```
 
-- **POST /login**
-  - **Description**: Login with email and password.
-  - **Body**: `{ "email": "user@example.com", "password": "password" }`
-  - **Response**: Same as signup.
-
-- **POST /google**
-  - **Description**: Login/Signup using Google OAuth ID Token.
-  - **For Flutter**: Use `google_sign_in` package to get the `idToken` from the user's Google account and send it here.
-  - **Body**:
-    ```json
-    {
-      "idToken": "eyJhb..." // ID Token received from Google
-    }
-    ```
-  - **Response**: Same as signup. Accounts are automatically created if they don't exist.
-
-- **POST /phone**
-  - **Description**: Login/Signup using Phone number and OTP.
-  - **Note**: Currently using mock OTP `123456` for development.
-  - **Body**:
-    ```json
-    {
-      "phone": "+1234567890",
-      "otp": "123456"
-    }
-    ```
-  - **Response**: Same as signup.
-
 - **POST /refresh**
   - **Description**: Get a new access token. Call this when you receive a 401 Unauthorized error.
   - **Body**: `{ "refreshToken": "..." }`
-  - **Response**: New pair of `{ accessToken, refreshToken, ... }`. **Note**: Determine if the refresh token is also rotated (new one returned). Yes, it is. Update your storage with the new refresh token.
-
-- **POST /verify-phone**
-  - **Description**: Link/Verify a phone number for an authenticated user.
-  - **Access**: Authenticated
-  - **Body**: `{ "phone": "+1...", "otp": "..." }`
-  - **Response**: New token pair.
+  - **Response**: New pair of `{ accessToken, refreshToken, ... }`.
 
 - **POST /logout**
   - **Description**: Invalidate the specific session.
   - **Access**: Authenticated
-  - **Body**: `{ "sessionId": "..." }` // Get sessionId from the decoded access token if needed, or track it on client.
+  - **Body**: `{ "sessionId": "..." }` // Get sessionId from the decoded access token if needed.
   - **Response**: `{ "message": "Logged out successfully" }`
 
 - **POST /admin/login**
   - **Description**: Login for admin users.
   - **Body**: `{ "email": "admin@example.com", "password": "..." }`
-  - **Response**: Same as standard login.
+  - **Response**: Same as standard login (accessToken, refreshToken).
 
 ### 3.2 User Profile
 **Base Path**: `/users`
@@ -226,9 +220,28 @@ Users can have one of the following plans (`Plan` enum):
   - **Description**: Get details of a specific audio file.
   - **Response**: Audio object.
 
-### 3.8 Admin
+### 3.8 Quotes (Public/User)
+**Base Path**: `/quotes`
+**Access**: Authenticated (`USER` or `ADMIN`)
+
+- **GET /random**
+  - **Description**: Get a random quote based on mood.
+  - **Query Params**: `mood` (required, e.g., `JOYFUL`)
+  - **Response**: Quote object.
+
+### 3.9 Admin
 **Base Path**: `/admin`
 **Access**: Authenticated AND `Role: ADMIN`
+
+- **POST /quotes**
+  - **Description**: Create a new quote.
+  - **Body**: `{ "text": "...", "author": "...", "mood": "..." }`
+
+- **GET /quotes**
+  - **Description**: List quotes. Optional `?mood=...` filter.
+
+- **DELETE /quotes/:id**
+  - **Description**: Delete a quote.
 
 - **POST /question**
   - **Description**: Create a new question set (7 questions).
@@ -276,4 +289,3 @@ Common Status Codes:
 - 403: Forbidden (Insufficient role)
 - 404: Not Found
 - 500: Internal Server Error
-

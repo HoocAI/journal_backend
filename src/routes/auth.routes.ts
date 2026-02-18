@@ -31,13 +31,20 @@ const adminLoginSchema = z.object({
     password: z.string().min(1, 'Password is required'),
 });
 
-// ─── Step 1: Google OAuth ─────────────────────────────────────────────────────
+// ─── Step 1: Google OAuth (Login or Signup) ───────────────────────────────────
 
 /**
  * POST /auth/google
- * Step 1 of 2-step signup.
- * Verifies Google ID token, creates user if new, returns a provisional token.
- * The provisional token must be used to complete Step 2 (phone verification).
+ * 
+ * Scenario A (New or Unverified User):
+ *   - Verifies Google ID token.
+ *   - Returns a PROVISIONAL token.
+ *   - User must proceed to Step 2 (Phone Verification).
+ * 
+ * Scenario B (Existing Verified User):
+ *   - Verifies Google ID token.
+ *   - Checks if `isPhoneVerified` is true.
+ *   - Returns a FULL ACCESS token (Login complete).
  */
 router.post(
     '/google',
@@ -53,7 +60,62 @@ router.post(
     })
 );
 
-// ─── Step 2: Phone OTP Verification ──────────────────────────────────────────
+// ─── Direct Phone Login ───────────────────────────────────────────────────────
+
+/**
+ * POST /auth/login/phone/initiate
+ * Initiate phone login by requesting an OTP.
+ * Assumes user already exists (Login Only).
+ */
+router.post(
+    '/login/phone/initiate',
+    asyncHandler(async (req: Request, res: Response) => {
+        const schema = z.object({
+            phone: z.string().min(10, 'Phone number is required'),
+        });
+
+        const parseResult = schema.safeParse(req.body);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const result = await authService.requestPhoneLogin(parseResult.data.phone);
+        res.status(200).json(result);
+    })
+);
+
+/**
+ * POST /auth/login/phone/verify
+ * Verify OTP and login.
+ * Returns full access token.
+ */
+router.post(
+    '/login/phone/verify',
+    asyncHandler(async (req: Request, res: Response) => {
+        const schema = z.object({
+            phone: z.string().min(10, 'Phone number is required'),
+            otp: z.string().length(6, 'OTP must be 6 digits'),
+        });
+
+        const parseResult = schema.safeParse(req.body);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const { phone, otp } = parseResult.data;
+        const tokenPair = await authService.verifyPhoneLogin(phone, otp);
+
+        res.status(200).json({
+            accessToken: tokenPair.accessToken,
+            refreshToken: tokenPair.refreshToken,
+            expiresIn: tokenPair.expiresIn,
+            tokenType: 'Bearer',
+            user: tokenPair.user,
+        });
+    })
+);
+
+// ─── Step 2: Phone OTP Verification (Signup Completion) ───────────────────────
 
 /**
  * POST /auth/verify-phone
