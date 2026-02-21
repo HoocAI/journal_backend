@@ -23,7 +23,15 @@ The application has two primary user roles defined in the `Role` enum:
 Users can have one of the following plans (`Plan` enum):
 - **FREE**: Basic access.
 - **TRIAL**: Limited time premium access (checked via `trialEndsAt`).
-- **PREMIUM**: Full access.
+- **PREMIUM**: Full access. *Awarded automatically after a 14-day journal streak.*
+
+### 2.1 Streaks & Wallet
+The application tracks user consistency through a streak system:
+- **Daily Streak**: Incremented when a user makes at least one journal entry per day.
+- **Rewards**: 
+  - Each journal entry awards **+1 Coin**.
+  - Maintaining a **14-day streak** automatically upgrades the user to the **PREMIUM** plan.
+  - Streaks do not reset after reaching the 14-day milestone; they continue to increment as long as the user remains consistent.
 
 3. API Endpoints
 ----------------
@@ -53,7 +61,16 @@ Users can have one of the following plans (`Plan` enum):
     {
       "accessToken": "ey...",
       "refreshToken": "ey...",
-      "user": { ... }, // Full login success
+      "user": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "email": "user@example.com",
+        "phone": "+1234567890",
+        "role": "USER",
+        "name": "Jane Doe",
+        "plan": "FREE",
+        "currentStreak": 5,
+        "coins": 25
+      },
       "requiresPhoneVerification": false
     }
     ```
@@ -85,14 +102,31 @@ Users can have one of the following plans (`Plan` enum):
       "refreshToken": "ey...",
       "expiresIn": 900,
       "tokenType": "Bearer",
-      "user": { ... }
+      "user": {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "email": "user@example.com",
+        "phone": "+1234567890",
+        "role": "USER",
+        "name": "Jane Doe",
+        "plan": "FREE",
+        "currentStreak": 5,
+        "coins": 25
+      }
     }
     ```
 
 - **POST /refresh**
   - **Description**: Get a new access token. Call this when you receive a 401 Unauthorized error.
   - **Body**: `{ "refreshToken": "..." }`
-  - **Response**: New pair of `{ accessToken, refreshToken, ... }`.
+  - **Response**: 
+    ```json
+    { 
+      "accessToken": "ey...", 
+      "refreshToken": "ey...",
+      "expiresIn": 900,
+      "tokenType": "Bearer"
+    }
+    ```
 
 - **POST /logout**
   - **Description**: Invalidate the specific session.
@@ -110,8 +144,34 @@ Users can have one of the following plans (`Plan` enum):
 **Access**: Authenticated (`USER` or `ADMIN`)
 
 - **GET /profile**
-  - **Description**: Get current user's profile details.
-  - **Response**: User object (name, age, language, timezone, focus, etc.).
+  - **Description**: Get current user's profile details, including streak and wallet information.
+  - **Response**: 
+    ```json
+    {
+      "id": "550e8400-e29b-41d4-a716-446655440000",
+      "email": "user@example.com",
+      "phone": "+1234567890",
+      "role": "USER",
+      "name": "Jane Doe",
+      "age": 28,
+      "language": "English",
+      "timezone": "UTC+5:30",
+      "focus": ["Inner Peace 🕊️", "Self Growth 🌱"],
+      "plan": "FREE",
+      "trialEndsAt": "2023-11-10T10:00:00.000Z",
+      "isActive": true,
+      "onboardingCompleted": true,
+      "goalsSet": true,
+      "isEmailVerified": true,
+      "isPhoneVerified": true,
+      "currentStreak": 5,
+      "longestStreak": 14,
+      "coins": 25,
+      "lastEntryDate": "2023-10-27T10:00:00.000Z",
+      "createdAt": "2023-10-01T10:00:00.000Z",
+      "updatedAt": "2023-10-27T10:00:00.000Z"
+    }
+    ```
 
 - **PATCH /profile**
   - **Description**: Update user profile details.
@@ -160,11 +220,37 @@ Users can have one of the following plans (`Plan` enum):
     - `content` (text)
     - `photo` (file, optional)
     - `audio` (file, optional)
-  - **Response**: Created entry object.
+  - **Response**: 
+    ```json
+    {
+      "id": "e2e8400-e29b-41d4-a716-446655440000",
+      "userId": "550e8400-e29b-41d4-a716-446655440000",
+      "content": "Today was a great day!",
+      "photoUrl": "https://storage.googleapis.com/...",
+      "audioUrl": null,
+      "entryDate": "2023-10-27T00:00:00.000Z",
+      "createdAt": "2023-10-27T10:00:00.000Z",
+      "updatedAt": "2023-10-27T10:00:00.000Z"
+    }
+    ```
+  - **Note**: Each new entry increases the user's `coins` by 1 and updates their `currentStreak`.
 
 - **GET /me**
   - **Description**: Get all journal entries for the current user.
-  - **Response**: Array of journal entries.
+  - **Response**: 
+    ```json
+    [
+      {
+        "id": "e2e8400-e29b-41d4-a716-446655440000",
+        "userId": "550e8400-e29b-41d4-a716-446655440000",
+        "content": "Today was a great day!",
+        "photoUrl": null,
+        "audioUrl": null,
+        "entryDate": "2023-10-27T00:00:00.000Z",
+        "createdAt": "2023-10-27T10:00:00.000Z"
+      }
+    ]
+    ```
 
 ### 3.5 Mood
 **Base Path**: `/mood`
@@ -179,11 +265,33 @@ Users can have one of the following plans (`Plan` enum):
       "reason": "Optional reason"
     }
     ```
-  - **Response**: Created mood entry.
+  - **Response**: 
+    ```json
+    {
+      "id": "m1e8400-e29b-41d4-a716-446655440000",
+      "userId": "550e8400-e29b-41d4-a716-446655440000",
+      "mood": "JOYFUL",
+      "reason": "Had a great coffee with a friend",
+      "entryDate": "2023-10-27T10:00:00.000Z",
+      "createdAt": "2023-10-27T10:00:00.000Z"
+    }
+    ```
 
 - **GET /me**
   - **Description**: Get all mood entries for the current user.
-  - **Response**: Array of mood entries.
+  - **Response**: 
+    ```json
+    [
+      {
+        "id": "m1e8400-e29b-41d4-a716-446655440000",
+        "userId": "550e8400-e29b-41d4-a716-446655440000",
+        "mood": "JOYFUL",
+        "reason": "Had a great coffee with a friend",
+        "entryDate": "2023-10-27T10:00:00.000Z",
+        "createdAt": "2023-10-27T10:00:00.000Z"
+      }
+    ]
+    ```
 
 #### Valid Mood Types:
 - **Positive**: JOYFUL, EXCITED, PROUD, GRATEFUL, PEACEFUL, CONTENT, PLAYFUL, HOPEFUL, CURIOUS
@@ -196,17 +304,47 @@ Users can have one of the following plans (`Plan` enum):
 
 - **GET /today**
   - **Description**: Get the daily question for the user.
-  - **Response**: Question object.
+  - **Response**: 
+    ```json
+    {
+      "id": "q1e8400-e29b-41d4-a716-446655440000",
+      "text": "What are you grateful for today?",
+      "order": 0,
+      "questionSetId": "qs1e8400-e29b-41d4-a716-446655440000"
+    }
+    ```
 
 - **POST /today**
   - **Description**: Submit an answer to the daily question.
   - **Body**: `{ "answer": "My answer..." }`
-  - **Response**: Created answer object.
+  - **Response**: 
+    ```json
+    {
+      "id": "a1e8400-e29b-41d4-a716-446655440000",
+      "userId": "550e8400-e29b-41d4-a716-446655440000",
+      "questionId": "q1e8400-e29b-41d4-a716-446655440000",
+      "answer": "My health and family",
+      "answerDate": "2023-10-27T00:00:00.000Z",
+      "createdAt": "2023-10-27T10:00:00.000Z"
+    }
+    ```
 
 - **GET /history**
   - **Description**: Get answer history.
   - **Query Params**: `limit`, `offset`
-  - **Response**: Historic answers.
+  - **Response**: 
+    ```json
+    [
+      {
+        "id": "a1e8400-e29b-41d4-a716-446655440000",
+        "userId": "550e8400-e29b-41d4-a716-446655440000",
+        "questionId": "q1e8400-e29b-41d4-a716-446655440000",
+        "answer": "My health and family",
+        "answerDate": "2023-10-27T00:00:00.000Z",
+        "createdAt": "2023-10-27T10:00:00.000Z"
+      }
+    ]
+    ```
 
 ### 3.7 Audio (User)
 **Base Path**: `/audio`
@@ -214,11 +352,30 @@ Users can have one of the following plans (`Plan` enum):
 
 - **GET /**
   - **Description**: List all available audio content.
-  - **Response**: Array of audio objects.
+  - **Response**: 
+    ```json
+    [
+      {
+        "id": "au1e8400-e29b-41d4-a716-446655440000",
+        "title": "Morning Meditation",
+        "audioUrl": "https://storage.googleapis.com/.../morning.mp3",
+        "createdAt": "2023-10-01T10:00:00.000Z"
+      }
+    ]
+    ```
+    *(URL for placeholders is not possible here as per user request to be complete, so I will use realistic dummy URLs)*
 
 - **GET /:id**
   - **Description**: Get details of a specific audio file.
-  - **Response**: Audio object.
+  - **Response**: 
+    ```json
+    {
+      "id": "au1e8400-e29b-41d4-a716-446655440000",
+      "title": "Morning Meditation",
+      "audioUrl": "https://storage.googleapis.com/assets/audio/morning.mp3",
+      "createdAt": "2023-10-01T10:00:00.000Z"
+    }
+    ```
 
 ### 3.8 Quotes (Public/User)
 **Base Path**: `/quotes`
@@ -227,7 +384,34 @@ Users can have one of the following plans (`Plan` enum):
 - **GET /random**
   - **Description**: Get a random quote based on mood.
   - **Query Params**: `mood` (required, e.g., `JOYFUL`)
-  - **Response**: Quote object.
+  - **Response**: 
+    ```json
+    {
+      "id": "qu1e8400-e29b-41d4-a716-446655440000",
+      "text": "Every day is a second chance.",
+      "author": "Unknown",
+      "mood": "JOYFUL",
+      "createdAt": "2023-10-01T10:00:00.000Z"
+    }
+    ```
+
+### 3.10 Affirmations (Public/User)
+**Base Path**: `/affirmations`
+**Access**: Authenticated (`USER` or `ADMIN`)
+
+- **GET /random**
+  - **Description**: Get a random affirmation based on mood.
+  - **Query Params**: `mood` (required, e.g., `JOYFUL`)
+  - **Response**: 
+    ```json
+    {
+      "id": "af1e8400-e29b-41d4-a716-446655440000",
+      "text": "I am capable of achieving my goals.",
+      "author": "Self",
+      "mood": "JOYFUL",
+      "createdAt": "2023-10-01T10:00:00.000Z"
+    }
+    ```
 
 ### 3.9 Admin
 **Base Path**: `/admin`
@@ -235,7 +419,14 @@ Users can have one of the following plans (`Plan` enum):
 
 - **POST /quotes**
   - **Description**: Create a new quote.
-  - **Body**: `{ "text": "...", "author": "...", "mood": "..." }`
+  - **Body**: 
+    ```json
+    { 
+      "text": "The only way to do great work is to love what you do.", 
+      "author": "Steve Jobs", 
+      "mood": "PROUD" 
+    }
+    ```
 
 - **GET /quotes**
   - **Description**: List quotes. Optional `?mood=...` filter.
@@ -243,18 +434,77 @@ Users can have one of the following plans (`Plan` enum):
 - **DELETE /quotes/:id**
   - **Description**: Delete a quote.
 
+- **POST /affirmations**
+  - **Description**: Create a new affirmation.
+  - **Body**: 
+    ```json
+    { 
+      "text": "I am confident in my abilities.", 
+      "author": "Self", 
+      "mood": "PROUD" 
+    }
+    ```
+
+- **GET /affirmations**
+  - **Description**: List affirmations. Optional `?mood=...` filter.
+
+- **DELETE /affirmations/:id**
+  - **Description**: Delete an affirmation.
+
 - **POST /question**
   - **Description**: Create a new question set (7 questions).
-  - **Body**: `{ "title": "...", "startDate": "YYYY-MM-DD", "questions": [ { "text": "...", "order": 0 }, ... ] }`
+  - **Body**: 
+    ```json
+    { 
+      "title": "Weekly Reflection", 
+      "startDate": "2023-11-01", 
+      "questions": [ 
+        { "text": "What went well this week?", "order": 0 },
+        { "text": "What could have been better?", "order": 1 },
+        { "text": "What is your goal for next week?", "order": 2 }
+      ] 
+    }
+    ```
 
 - **GET /question/sets**
   - **Description**: List all question sets.
+  - **Response**: 
+    ```json
+    [
+      {
+        "id": "qs1e8400-e29b-41d4-a716-446655440000",
+        "title": "Weekly Reflection",
+        "startDate": "2023-11-01T00:00:00.000Z",
+        "createdAt": "2023-10-25T10:00:00.000Z"
+      }
+    ]
+    ```
 
 - **GET /users**
   - **Description**: Get a list of all users.
+  - **Response**: 
+    ```json
+    [
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "email": "user@example.com",
+        "name": "Jane Doe",
+        "role": "USER",
+        "plan": "FREE"
+      }
+    ]
+    ```
 
 - **GET /users/:userId/daily**
   - **Description**: Get daily data (journal, mood, answers) for a specific user.
+  - **Response**: 
+    ```json
+    {
+      "journalEntries": [],
+      "moods": [],
+      "answers": []
+    }
+    ```
 
 - **PATCH /users/:userId/disable**
   - **Description**: Disable a user account.
@@ -269,6 +519,17 @@ Users can have one of the following plans (`Plan` enum):
 
 - **GET /audio**
   - **Description**: List all audio content (admin view).
+  - **Response**: 
+    ```json
+    [
+      {
+        "id": "au1e8400-e29b-41d4-a716-446655440000",
+        "title": "Morning Meditation",
+        "audioUrl": "https://storage.googleapis.com/assets/audio/morning.mp3",
+        "createdAt": "2023-10-01T10:00:00.000Z"
+      }
+    ]
+    ```
 
 4. Error Handling
 -----------------

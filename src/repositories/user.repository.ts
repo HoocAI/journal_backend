@@ -19,6 +19,10 @@ export interface UserData {
     language: string | null;
     timezone: string | null;
     focus: string[];
+    currentStreak: number;
+    longestStreak: number;
+    lastEntryDate: Date | null;
+    coins: number;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -30,6 +34,10 @@ export interface CreateUserInput {
     role?: Role;
     plan?: Plan;
     trialEndsAt?: Date;
+    currentStreak?: number;
+    longestStreak?: number;
+    lastEntryDate?: Date;
+    coins?: number;
 }
 
 /**
@@ -55,6 +63,10 @@ export const userRepository = {
                 role: input.role,
                 plan: input.plan,
                 trialEndsAt: input.trialEndsAt,
+                currentStreak: input.currentStreak || 0,
+                longestStreak: input.longestStreak || 0,
+                lastEntryDate: input.lastEntryDate || null,
+                coins: input.coins || 0,
             },
         });
 
@@ -103,11 +115,11 @@ export const userRepository = {
     /**
      * Updates a user
      */
-    async update(userId: string, data: Partial<Omit<UserData, 'id' | 'createdAt'>>): Promise<UserData> {
+    async update(userId: string, data: Partial<Omit<UserData, 'id' | 'createdAt' | 'updatedAt'>>): Promise<UserData> {
         return prisma.user.update({
             where: { id: userId },
             data,
-        });
+        }) as Promise<UserData>;
     },
 
     /**

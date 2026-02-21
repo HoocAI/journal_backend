@@ -220,4 +220,62 @@ router.delete(
     })
 );
 
+// ─── Affirmations ─────────────────────────────────────────────────────────────
+
+import { affirmationService } from '../services/admin/affirmation.service';
+
+const createAffirmationSchema = z.object({
+    text: z.string().min(1, 'Affirmation text is required'),
+    author: z.string().optional(),
+    mood: z.enum([
+        'VERY_BAD', 'BAD', 'NEUTRAL', 'GOOD', 'VERY_GOOD',
+        'JOYFUL', 'EXCITED', 'PROUD', 'GRATEFUL', 'PEACEFUL', 'CONTENT', 'PLAYFUL', 'HOPEFUL', 'CURIOUS',
+        'SAD', 'DEPRESSED', 'LONELY', 'HURT', 'DISAPPOINTED',
+        'ANGRY', 'FRUSTRATED', 'ANNOYED', 'ANXIOUS', 'OVERWHELMED', 'STRESSED', 'NERVOUS', 'INSECURE',
+        'TIRED', 'BORED', 'NUMB', 'GUILTY', 'ASHAMED'
+    ]),
+});
+
+const affirmationIdSchema = z.object({
+    id: z.string().uuid('Invalid affirmation ID'),
+});
+
+// POST /api/v1/admin/affirmations - Create a new affirmation
+router.post(
+    '/affirmations',
+    asyncHandler(async (req: Request, res: Response) => {
+        const parseResult = createAffirmationSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const affirmation = await affirmationService.createAffirmation(parseResult.data);
+        res.status(201).json(affirmation);
+    })
+);
+
+// GET /api/v1/admin/affirmations - List all affirmations (optional: ?mood=JOYFUL)
+router.get(
+    '/affirmations',
+    asyncHandler(async (req: Request, res: Response) => {
+        const mood = req.query.mood as any;
+        const affirmations = await affirmationService.getAffirmations(mood);
+        res.status(200).json(affirmations);
+    })
+);
+
+// DELETE /api/v1/admin/affirmations/:id - Delete an affirmation
+router.delete(
+    '/affirmations/:id',
+    asyncHandler(async (req: Request, res: Response) => {
+        const parseResult = affirmationIdSchema.safeParse(req.params);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        await affirmationService.deleteAffirmation(parseResult.data.id);
+        res.status(204).send();
+    })
+);
+
 export { router as adminRouter };

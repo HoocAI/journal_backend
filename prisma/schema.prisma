@@ -83,6 +83,12 @@ model User {
   isEmailVerified     Boolean @default(false)
   isPhoneVerified     Boolean @default(false)
 
+  // Streak and Wallet
+  currentStreak  Int       @default(0)
+  longestStreak  Int       @default(0)
+  lastEntryDate  DateTime?
+  coins          Int       @default(0)
+
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
 
@@ -208,6 +214,14 @@ model AdminAudio {
 }
 
 model Quote {
+  id        String   @id @default(uuid())
+  text      String
+  author    String?
+  mood      MoodType
+  createdAt DateTime @default(now())
+}
+
+model Affirmation {
   id        String   @id @default(uuid())
   text      String
   author    String?
