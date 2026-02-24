@@ -3,7 +3,7 @@ API Documentation - Journal Backend
 
 1. Overview
 -----------
-This is the backend API for the Wellness/Journal application. It provides endpoints for user authentication, journaling, mood tracking, daily questions, and administrative functions.
+This is the backend API for the Wellness/Journal application. It provides endpoints for user authentication, journaling, mood tracking, daily questions, vision boards, and administrative functions.
 
 Base URL: http://localhost:3000/api/v1 (default)
 
@@ -427,12 +427,35 @@ The application tracks user consistency through a streak system:
       "mood": "PROUD" 
     }
     ```
+  - **Response (201 Created)**:
+    ```json
+    {
+      "id": "qu1e8400-e29b-41d4-a716-446655440000",
+      "text": "The only way to do great work is to love what you do.",
+      "author": "Steve Jobs",
+      "mood": "PROUD",
+      "createdAt": "2023-10-27T10:00:00.000Z"
+    }
+    ```
 
 - **GET /quotes**
-  - **Description**: List quotes. Optional `?mood=...` filter.
+  - **Description**: List all quotes. Optional `?mood=...` filter.
+  - **Response (200 OK)**:
+    ```json
+    [
+      {
+        "id": "qu1e8400-e29b-41d4-a716-446655440000",
+        "text": "The only way to do great work is to love what you do.",
+        "author": "Steve Jobs",
+        "mood": "PROUD",
+        "createdAt": "2023-10-27T10:00:00.000Z"
+      }
+    ]
+    ```
 
 - **DELETE /quotes/:id**
   - **Description**: Delete a quote.
+  - **Response**: 204 No Content.
 
 - **POST /affirmations**
   - **Description**: Create a new affirmation.
@@ -444,12 +467,35 @@ The application tracks user consistency through a streak system:
       "mood": "PROUD" 
     }
     ```
+  - **Response (201 Created)**:
+    ```json
+    {
+      "id": "af1e8400-e29b-41d4-a716-446655440000",
+      "text": "I am confident in my abilities.",
+      "author": "Self",
+      "mood": "PROUD",
+      "createdAt": "2023-10-27T10:00:00.000Z"
+    }
+    ```
 
 - **GET /affirmations**
-  - **Description**: List affirmations. Optional `?mood=...` filter.
+  - **Description**: List all affirmations. Optional `?mood=...` filter.
+  - **Response (200 OK)**:
+    ```json
+    [
+      {
+        "id": "af1e8400-e29b-41d4-a716-446655440000",
+        "text": "I am confident in my abilities.",
+        "author": "Self",
+        "mood": "PROUD",
+        "createdAt": "2023-10-27T10:00:00.000Z"
+      }
+    ]
+    ```
 
 - **DELETE /affirmations/:id**
   - **Description**: Delete an affirmation.
+  - **Response**: 204 No Content.
 
 - **POST /question**
   - **Description**: Create a new question set (7 questions).
@@ -530,6 +576,88 @@ The application tracks user consistency through a streak system:
       }
     ]
     ```
+
+### 3.11 Vision Board
+**Base Path**: `/vision-board`
+**Access**: Authenticated (`USER` or `ADMIN`)
+
+Vision boards let users create named boards and upload inspiration images (stored in S3). All image URLs returned are temporary pre-signed URLs.
+
+- **POST /boards**
+  - **Description**: Create a new vision board. Board names must be unique per user.
+  - **Body**:
+    ```json
+    { "name": "Dream Lifestyle" }
+    ```
+  - **Response (201 Created)**:
+    ```json
+    {
+      "id": "vb1e8400-e29b-41d4-a716-446655440000",
+      "userId": "550e8400-e29b-41d4-a716-446655440000",
+      "name": "Dream Lifestyle",
+      "images": [],
+      "createdAt": "2023-10-27T10:00:00.000Z",
+      "updatedAt": "2023-10-27T10:00:00.000Z"
+    }
+    ```
+
+- **GET /boards**
+  - **Description**: List all vision boards for the authenticated user.
+  - **Response (200 OK)**:
+    ```json
+    [
+      {
+        "id": "vb1e8400-e29b-41d4-a716-446655440000",
+        "userId": "550e8400-e29b-41d4-a716-446655440000",
+        "name": "Dream Lifestyle",
+        "_count": { "images": 3 },
+        "createdAt": "2023-10-27T10:00:00.000Z",
+        "updatedAt": "2023-10-27T10:00:00.000Z"
+      }
+    ]
+    ```
+
+- **DELETE /boards/:boardId**
+  - **Description**: Delete a vision board and all its images (cascade).
+  - **Response**: 204 No Content.
+
+- **GET /boards/:boardId/images**
+  - **Description**: Get all images in a board. Image URLs are temporary pre-signed S3 URLs.
+  - **Response (200 OK)**:
+    ```json
+    {
+      "id": "vb1e8400-e29b-41d4-a716-446655440000",
+      "name": "Dream Lifestyle",
+      "images": [
+        {
+          "id": "vi1e8400-e29b-41d4-a716-446655440000",
+          "visionBoardId": "vb1e8400-e29b-41d4-a716-446655440000",
+          "url": "https://s3.amazonaws.com/...?X-Amz-Signature=...",
+          "s3Key": "vision-board/vb1.../image.jpg",
+          "createdAt": "2023-10-27T10:00:00.000Z"
+        }
+      ]
+    }
+    ```
+
+- **POST /boards/:boardId/upload**
+  - **Description**: Upload an image to a vision board.
+  - **Format**: `multipart/form-data`
+  - **Fields**: `file` (image file, max 5MB, image/* types only)
+  - **Response (201 Created)**:
+    ```json
+    {
+      "id": "vi1e8400-e29b-41d4-a716-446655440000",
+      "visionBoardId": "vb1e8400-e29b-41d4-a716-446655440000",
+      "url": "https://s3.amazonaws.com/...?X-Amz-Signature=...",
+      "s3Key": "vision-board/vb1.../image.jpg",
+      "createdAt": "2023-10-27T10:00:00.000Z"
+    }
+    ```
+
+- **DELETE /boards/:boardId/images/:imageId**
+  - **Description**: Remove a specific image from a board.
+  - **Response**: 204 No Content.
 
 4. Error Handling
 -----------------

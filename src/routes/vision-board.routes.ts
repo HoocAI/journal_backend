@@ -3,7 +3,7 @@ import multer from 'multer';
 import { z } from 'zod';
 import { requireAuth } from '../middleware';
 import { asyncHandler } from '../utils/asyncHandler';
-import { uploadFileToS3 } from '../utils/s3';
+import { uploadFileToS3, getSignedUrl } from '../utils/s3';
 import { generateFilename } from '../utils/upload';
 import { NotFoundError, ValidationError } from '../utils/errors';
 import { visionBoardRepository } from '../repositories/vision-board.repository';
@@ -91,7 +91,15 @@ router.get(
             throw new NotFoundError('Board not found');
         }
 
-        res.status(200).json(board);
+        // Replace stored URLs with temporary pre-signed URLs
+        const imagesWithSignedUrls = await Promise.all(
+            (board.images || []).map(async (img: any) => ({
+                ...img,
+                url: img.s3Key ? await getSignedUrl(img.s3Key) : img.url,
+            }))
+        );
+
+        res.status(200).json({ ...board, images: imagesWithSignedUrls });
     })
 );
 
@@ -119,7 +127,10 @@ router.post(
         const url = await uploadFileToS3(file.buffer, s3Key, file.mimetype);
 
         const image = await visionBoardRepository.addImage(boardId, url, s3Key);
-        res.status(201).json(image);
+
+        // Return the image with a pre-signed URL for immediate viewing
+        const signedUrl = await getSignedUrl(s3Key);
+        res.status(201).json({ ...image, url: signedUrl });
     })
 );
 
