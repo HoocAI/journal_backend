@@ -1,11 +1,12 @@
-
 import { Router, Request, Response } from 'express';
 import multer from 'multer';
+import { z } from 'zod';
 import { requireAuth } from '../middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 import { uploadFileToS3 } from '../utils/s3';
 import { generateFilename } from '../utils/upload';
-import { UploadError, ValidationError } from '../utils/errors';
+import { NotFoundError, ValidationError } from '../utils/errors';
+import { visionBoardRepository } from '../repositories/vision-board.repository';
 
 const router = Router();
 
@@ -26,22 +27,124 @@ const upload = multer({
 
 router.use(requireAuth());
 
-// POST /api/v1/vision-board/upload
+const createBoardSchema = z.object({
+    name: z.string().min(1).max(100),
+});
+
+// POST /api/v1/vision-board/boards — Create a new board
 router.post(
-    '/upload',
+    '/boards',
+    asyncHandler(async (req: Request, res: Response) => {
+        const parseResult = createBoardSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const { name } = parseResult.data;
+        const userId = req.user!.userId;
+
+        const nameExists = await visionBoardRepository.boardNameExists(userId, name);
+        if (nameExists) {
+            throw new ValidationError(`A board named "${name}" already exists.`);
+        }
+
+        const board = await visionBoardRepository.createBoard(userId, name);
+        res.status(201).json(board);
+    })
+);
+
+// GET /api/v1/vision-board/boards — List all boards for the user
+router.get(
+    '/boards',
+    asyncHandler(async (req: Request, res: Response) => {
+        const boards = await visionBoardRepository.findBoardsByUser(req.user!.userId);
+        res.status(200).json(boards);
+    })
+);
+
+// DELETE /api/v1/vision-board/boards/:boardId — Delete a board (and its images via cascade)
+router.delete(
+    '/boards/:boardId',
+    asyncHandler(async (req: Request, res: Response) => {
+        const boardId = req.params['boardId'] as string;
+        const userId = req.user!.userId;
+
+        const board = await visionBoardRepository.findBoardByIdAndUser(boardId, userId);
+        if (!board) {
+            throw new NotFoundError('Board not found');
+        }
+
+        await visionBoardRepository.deleteBoard(boardId, userId);
+        res.status(204).send();
+    })
+);
+
+// GET /api/v1/vision-board/boards/:boardId/images — Get all images in a board
+router.get(
+    '/boards/:boardId/images',
+    asyncHandler(async (req: Request, res: Response) => {
+        const boardId = req.params['boardId'] as string;
+        const userId = req.user!.userId;
+
+        const board = await visionBoardRepository.getBoardWithImages(boardId, userId);
+        if (!board) {
+            throw new NotFoundError('Board not found');
+        }
+
+        res.status(200).json(board);
+    })
+);
+
+// POST /api/v1/vision-board/boards/:boardId/upload — Upload an image to a board
+router.post(
+    '/boards/:boardId/upload',
     upload.single('file'),
     asyncHandler(async (req: Request, res: Response) => {
+        const boardId = req.params['boardId'] as string;
+        const userId = req.user!.userId;
+
+        const board = await visionBoardRepository.findBoardByIdAndUser(boardId, userId);
+        if (!board) {
+            throw new NotFoundError('Board not found');
+        }
+
         if (!req.file) {
             throw new ValidationError('No file uploaded');
         }
 
         const file = req.file;
-        const filename = generateFilename(req.user!.userId, file.originalname);
-        const key = `vision-board/${filename}`; // Organize in a folder
+        const filename = generateFilename(userId, file.originalname);
+        const s3Key = `vision-board/${boardId}/${filename}`;
 
-        const url = await uploadFileToS3(file.buffer, key, file.mimetype);
+        const url = await uploadFileToS3(file.buffer, s3Key, file.mimetype);
 
-        res.status(200).json({ url });
+        const image = await visionBoardRepository.addImage(boardId, url, s3Key);
+        res.status(201).json(image);
+    })
+);
+
+// DELETE /api/v1/vision-board/boards/:boardId/images/:imageId — Remove an image from a board
+router.delete(
+    '/boards/:boardId/images/:imageId',
+    asyncHandler(async (req: Request, res: Response) => {
+        const boardId = req.params['boardId'] as string;
+        const imageId = req.params['imageId'] as string;
+        const userId = req.user!.userId;
+
+        // Verify the board belongs to this user
+        const board = await visionBoardRepository.findBoardByIdAndUser(boardId, userId);
+        if (!board) {
+            throw new NotFoundError('Board not found');
+        }
+
+        // Verify the image belongs to this board
+        const image = await visionBoardRepository.findImageById(imageId);
+        if (!image || image.visionBoardId !== boardId) {
+            throw new NotFoundError('Image not found');
+        }
+
+        await visionBoardRepository.removeImage(imageId);
+        res.status(204).send();
     })
 );
 
