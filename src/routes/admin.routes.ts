@@ -278,4 +278,36 @@ router.delete(
     })
 );
 
+// ─── Notifications ─────────────────────────────────────────────────────────────
+
+import { notificationService } from '../services/notification.service';
+
+const sendNotificationSchema = z.object({
+    title: z.string().min(1, 'Title is required'),
+    body: z.string().min(1, 'Body is required'),
+    userId: z.string().uuid().optional(), // If provided, send to specific user; else send to all
+    data: z.record(z.any()).optional(),
+});
+
+// POST /api/v1/admin/send-notification - Send notification
+router.post(
+    '/send-notification',
+    asyncHandler(async (req: Request, res: Response) => {
+        const parseResult = sendNotificationSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const { title, body, userId, data } = parseResult.data;
+
+        if (userId) {
+            await notificationService.sendToUser(userId, title, body, data);
+            res.status(200).json({ message: `Notification sent to user ${userId}` });
+        } else {
+            const result = await notificationService.sendToAll(title, body, data);
+            res.status(200).json({ message: 'Notification sent to all users', result });
+        }
+    })
+);
+
 export { router as adminRouter };

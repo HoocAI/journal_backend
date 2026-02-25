@@ -143,6 +143,12 @@ The application tracks user consistency through a streak system:
 **Base Path**: `/users`
 **Access**: Authenticated (`USER` or `ADMIN`)
 
+- **POST /fcm-token**
+  - **Description**: Update user's Firebase Cloud Messaging token for push notifications.
+  - **Access**: Authenticated
+  - **Body**: `{ "token": "..." }`
+  - **Response**: `{ "message": "FCM token updated successfully" }`
+
 - **GET /profile**
   - **Description**: Get current user's profile details, including streak and wallet information.
   - **Response**: 
@@ -293,12 +299,64 @@ The application tracks user consistency through a streak system:
     ]
     ```
 
+- **GET /types**
+  - **Description**: Get all valid mood types supported by the system.
+  - **Response**: 
+    ```json
+    [
+      "VERY_BAD", "BAD", "NEUTRAL", "GOOD", "VERY_GOOD",
+      "JOYFUL", "EXCITED", "PROUD", "GRATEFUL", "PEACEFUL", "CONTENT", "PLAYFUL", "HOPEFUL", "CURIOUS",
+      "SAD", "DEPRESSED", "LONELY", "HURT", "DISAPPOINTED",
+      "ANGRY", "FRUSTRATED", "ANNOYED", "ANXIOUS", "OVERWHELMED", "STRESSED", "NERVOUS", "INSECURE",
+      "TIRED", "BORED", "NUMB", "GUILTY", "ASHAMED"
+    ]
+    ```
+
 #### Valid Mood Types:
 - **Positive**: JOYFUL, EXCITED, PROUD, GRATEFUL, PEACEFUL, CONTENT, PLAYFUL, HOPEFUL, CURIOUS
 - **Negative**: SAD, DEPRESSED, LONELY, HURT, DISAPPOINTED, ANGRY, FRUSTRATED, ANNOYED, ANXIOUS, OVERWHELMED, STRESSED, NERVOUS, INSECURE
 - **Neutral/Other**: VERY_BAD, BAD, NEUTRAL, GOOD, VERY_GOOD, TIRED, BORED, NUMB, GUILTY, ASHAMED
 
-### 3.6 Questions / Daily Prompt
+### 3.6 First Mood (Onboarding)
+**Base Path**: `/first-mood`
+**Access**: Authenticated (`USER` or `ADMIN`)
+
+This endpoint is used to record the user's very first mood during the onboarding process. It can only be called once per user.
+
+- **POST /**
+  - **Description**: Record the user's very first mood.
+  - **Body**:
+    ```json
+    {
+      "mood": "JOYFUL",
+      "reason": "Just started my wellness journey!"
+    }
+    ```
+  - **Response (201 Created)**:
+    ```json
+    {
+      "id": "fm1e8400-e29b-41d4-a716-446655440000",
+      "userId": "550e8400-e29b-41d4-a716-446655440000",
+      "mood": "JOYFUL",
+      "reason": "Just started my wellness journey!",
+      "createdAt": "2023-10-27T10:00:00.000Z"
+    }
+    ```
+
+- **GET /me**
+  - **Description**: Get the user's first mood entry.
+  - **Response (200 OK)**:
+    ```json
+    {
+      "id": "fm1e8400-e29b-41d4-a716-446655440000",
+      "userId": "550e8400-e29b-41d4-a716-446655440000",
+      "mood": "JOYFUL",
+      "reason": "Just started my wellness journey!",
+      "createdAt": "2023-10-27T10:00:00.000Z"
+    }
+    ```
+
+### 3.7 Questions / Daily Prompt
 **Base Path**: `/questions`
 **Access**: Authenticated (`USER` or `ADMIN`)
 
@@ -346,7 +404,7 @@ The application tracks user consistency through a streak system:
     ]
     ```
 
-### 3.7 Audio (User)
+### 3.8 Audio (User)
 **Base Path**: `/audio`
 **Access**: Authenticated (`USER` or `ADMIN`)
 
@@ -377,7 +435,7 @@ The application tracks user consistency through a streak system:
     }
     ```
 
-### 3.8 Quotes (Public/User)
+### 3.9 Quotes (Public/User)
 **Base Path**: `/quotes`
 **Access**: Authenticated (`USER` or `ADMIN`)
 
@@ -411,170 +469,6 @@ The application tracks user consistency through a streak system:
       "mood": "JOYFUL",
       "createdAt": "2023-10-01T10:00:00.000Z"
     }
-    ```
-
-### 3.9 Admin
-**Base Path**: `/admin`
-**Access**: Authenticated AND `Role: ADMIN`
-
-- **POST /quotes**
-  - **Description**: Create a new quote.
-  - **Body**: 
-    ```json
-    { 
-      "text": "The only way to do great work is to love what you do.", 
-      "author": "Steve Jobs", 
-      "mood": "PROUD" 
-    }
-    ```
-  - **Response (201 Created)**:
-    ```json
-    {
-      "id": "qu1e8400-e29b-41d4-a716-446655440000",
-      "text": "The only way to do great work is to love what you do.",
-      "author": "Steve Jobs",
-      "mood": "PROUD",
-      "createdAt": "2023-10-27T10:00:00.000Z"
-    }
-    ```
-
-- **GET /quotes**
-  - **Description**: List all quotes. Optional `?mood=...` filter.
-  - **Response (200 OK)**:
-    ```json
-    [
-      {
-        "id": "qu1e8400-e29b-41d4-a716-446655440000",
-        "text": "The only way to do great work is to love what you do.",
-        "author": "Steve Jobs",
-        "mood": "PROUD",
-        "createdAt": "2023-10-27T10:00:00.000Z"
-      }
-    ]
-    ```
-
-- **DELETE /quotes/:id**
-  - **Description**: Delete a quote.
-  - **Response**: 204 No Content.
-
-- **POST /affirmations**
-  - **Description**: Create a new affirmation.
-  - **Body**: 
-    ```json
-    { 
-      "text": "I am confident in my abilities.", 
-      "author": "Self", 
-      "mood": "PROUD" 
-    }
-    ```
-  - **Response (201 Created)**:
-    ```json
-    {
-      "id": "af1e8400-e29b-41d4-a716-446655440000",
-      "text": "I am confident in my abilities.",
-      "author": "Self",
-      "mood": "PROUD",
-      "createdAt": "2023-10-27T10:00:00.000Z"
-    }
-    ```
-
-- **GET /affirmations**
-  - **Description**: List all affirmations. Optional `?mood=...` filter.
-  - **Response (200 OK)**:
-    ```json
-    [
-      {
-        "id": "af1e8400-e29b-41d4-a716-446655440000",
-        "text": "I am confident in my abilities.",
-        "author": "Self",
-        "mood": "PROUD",
-        "createdAt": "2023-10-27T10:00:00.000Z"
-      }
-    ]
-    ```
-
-- **DELETE /affirmations/:id**
-  - **Description**: Delete an affirmation.
-  - **Response**: 204 No Content.
-
-- **POST /question**
-  - **Description**: Create a new question set (7 questions).
-  - **Body**: 
-    ```json
-    { 
-      "title": "Weekly Reflection", 
-      "startDate": "2023-11-01", 
-      "questions": [ 
-        { "text": "What went well this week?", "order": 0 },
-        { "text": "What could have been better?", "order": 1 },
-        { "text": "What is your goal for next week?", "order": 2 }
-      ] 
-    }
-    ```
-
-- **GET /question/sets**
-  - **Description**: List all question sets.
-  - **Response**: 
-    ```json
-    [
-      {
-        "id": "qs1e8400-e29b-41d4-a716-446655440000",
-        "title": "Weekly Reflection",
-        "startDate": "2023-11-01T00:00:00.000Z",
-        "createdAt": "2023-10-25T10:00:00.000Z"
-      }
-    ]
-    ```
-
-- **GET /users**
-  - **Description**: Get a list of all users.
-  - **Response**: 
-    ```json
-    [
-      {
-        "id": "550e8400-e29b-41d4-a716-446655440000",
-        "email": "user@example.com",
-        "name": "Jane Doe",
-        "role": "USER",
-        "plan": "FREE"
-      }
-    ]
-    ```
-
-- **GET /users/:userId/daily**
-  - **Description**: Get daily data (journal, mood, answers) for a specific user.
-  - **Response**: 
-    ```json
-    {
-      "journalEntries": [],
-      "moods": [],
-      "answers": []
-    }
-    ```
-
-- **PATCH /users/:userId/disable**
-  - **Description**: Disable a user account.
-
-- **PATCH /users/:userId/enable**
-  - **Description**: Enable a user account.
-
-- **POST /audio**
-  - **Description**: Upload new audio content for users.
-  - **Format**: `multipart/form-data`
-  - **Fields**: `title` (text), `audio` (file).
-
-- **GET /audio**
-  - **Description**: List all audio content (admin view).
-  - **Response**: 
-    ```json
-    [
-      {
-        "id": "au1e8400-e29b-41d4-a716-446655440000",
-        "title": "Morning Meditation",
-        "audioUrl": "https://storage.googleapis.com/assets/audio/morning.mp3",
-        "createdAt": "2023-10-01T10:00:00.000Z"
-      }
-    ]
     ```
 
 ### 3.11 Vision Board
@@ -658,6 +552,185 @@ Vision boards let users create named boards and upload inspiration images (store
 - **DELETE /boards/:boardId/images/:imageId**
   - **Description**: Remove a specific image from a board.
   - **Response**: 204 No Content.
+
+### 3.12 Admin
+**Base Path**: `/admin`
+**Access**: Authenticated AND `Role: ADMIN`
+
+- **POST /quotes**
+  - **Description**: Create a new quote.
+  - **Body**: 
+    ```json
+    { 
+      "text": "The only way to do great work is to love what you do.", 
+      "author": "Steve Jobs", 
+      "mood": "PROUD" 
+    }
+    ```
+  - **Response (201 Created)**:
+    ```json
+    {
+      "id": "qu1e8400-e29b-41d4-a716-446655440000",
+      "text": "The only way to do great work is to love what you do.",
+      "author": "Steve Jobs",
+      "mood": "PROUD",
+      "createdAt": "2023-10-27T10:00:00.000Z"
+    }
+    ```
+
+- **GET /quotes**
+  - **Description**: List all quotes. Optional `?mood=...` filter.
+  - **Response (200 OK)**:
+    ```json
+    [
+      {
+        "id": "qu1e8400-e29b-41d4-a716-446655440000",
+        "text": "The only way to do great work is to love what you do.",
+        "author": "Steve Jobs",
+        "mood": "PROUD",
+        "createdAt": "2023-10-27T10:00:00.000Z"
+      }
+    ]
+    ```
+
+- **DELETE /quotes/:id**
+  - **Description**: Delete a quote.
+  - **Response**: 204 No Content.
+
+- **POST /affirmations**
+  - **Description**: Create a new affirmation.
+  - **Body**: 
+    ```json
+    { 
+      "text": "I am confident in my abilities.", 
+      "author": "Self", 
+      "mood": "PROUD" 
+    }
+    ```
+  - **Response (201 Created)**:
+    ```json
+    {
+      "id": "af1e8400-e29b-41d4-a716-446655440000",
+      "text": "I am confident in my abilities.",
+      "author": "Self",
+      "mood": "PROUD",
+      "createdAt": "2023-10-27T10:00:00.000Z"
+    }
+    ```
+
+- **GET /affirmations**
+  - **Description**: List all affirmations. Optional `?mood=...` filter.
+  - **Response (200 OK)**:
+    ```json
+    [
+      {
+        "id": "af1e8400-e29b-41d4-a716-446655440000",
+        "text": "I am confident in my abilities.",
+        "author": "Self",
+        "mood": "PROUD",
+        "createdAt": "2023-10-27T10:00:00.000Z"
+      }
+    ]
+    ```
+
+- **DELETE /affirmations/:id**
+  - **Description**: Delete an affirmation.
+  - **Response**: 204 No Content.
+
+- **POST /send-notification**
+  - **Description**: Send a push notification to a specific user or all users.
+  - **Access**: Authenticated AND `Role: ADMIN`
+  - **Body**:
+    ```json
+    {
+      "title": "New Update!",
+      "body": "Check out the latest features in the app.",
+      "userId": "uuid", // Optional: send to specific user
+      "data": { "screen": "journal" } // Optional: extra metadata
+    }
+    ```
+  - **Response**: `{ "message": "Notification sent..." }`
+
+- **POST /question**
+  - **Description**: Create a new question set (7 questions).
+  - **Body**: 
+    ```json
+    { 
+      "title": "Weekly Reflection", 
+      "startDate": "2023-11-01", 
+      "questions": [ 
+        { "text": "What went well this week?", "order": 0 },
+        { "text": "What could have been better?", "order": 1 },
+        { "text": "What is your goal for next week?", "order": 2 }
+      ] 
+    }
+    ```
+
+- **GET /question/sets**
+  - **Description**: List all question sets.
+  - **Response**: 
+    ```json
+    [
+      {
+        "id": "qs1e8400-e29b-41d4-a716-446655440000",
+        "title": "Weekly Reflection",
+        "startDate": "2023-11-01T00:00:00.000Z",
+        "createdAt": "2023-10-25T10:00:00.000Z"
+      }
+    ]
+    ```
+
+- **GET /users**
+  - **Description**: Get a list of all users.
+  - **Response**: 
+    ```json
+    [
+      {
+        "id": "550e8400-e29b-41d4-a716-446655440000",
+        "email": "user@example.com",
+        "name": "Jane Doe",
+        "role": "USER",
+        "plan": "FREE"
+      }
+    ]
+    ```
+
+- **GET /users/:userId/daily**
+  - **Description**: Get daily data (journal, mood, answers) for a specific user.
+  - **Response**: 
+    ```json
+    {
+      "journalEntries": [],
+      "moods": [],
+      "answers": []
+    }
+    ```
+
+- **PATCH /users/:userId/disable**
+  - **Description**: Disable a user account.
+
+- **PATCH /users/:userId/enable**
+  - **Description**: Enable a user account.
+
+- **POST /audio**
+  - **Description**: Upload new audio content for users.
+  - **Format**: `multipart/form-data`
+  - **Fields**: `title` (text), `audio` (file).
+
+- **GET /audio**
+  - **Description**: List all audio content (admin view).
+  - **Response**: 
+    ```json
+    [
+      {
+        "id": "au1e8400-e29b-41d4-a716-446655440000",
+        "title": "Morning Meditation",
+        "audioUrl": "https://storage.googleapis.com/assets/audio/morning.mp3",
+        "createdAt": "2023-10-01T10:00:00.000Z"
+      }
+    ]
+    ```
+
 
 4. Error Handling
 -----------------

@@ -100,6 +100,7 @@ model User {
   goals          Goal[]
   visionBoards   VisionBoard[]
   firstMoodEntry FirstMoodEntry?
+  fcmToken       String?
 }
 
 model Session {
