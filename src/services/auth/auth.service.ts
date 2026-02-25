@@ -239,7 +239,11 @@ export const authService = {
         });
 
         const newExpiresAt = new Date(Date.now() + getRefreshTokenExpiresIn() * 1000);
-        await sessionRepository.updateRefreshToken(session.id, newRefreshToken, newExpiresAt);
+        const updatedSession = await sessionRepository.updateRefreshToken(session.id, newRefreshToken, newExpiresAt);
+        if (!updatedSession) {
+            throw AuthError.refreshTokenInvalid();
+        }
+
 
         return {
             accessToken: newAccessToken,
@@ -371,7 +375,11 @@ export const authService = {
             sessionId: session.id,
         });
 
-        await sessionRepository.updateRefreshToken(session.id, finalRefreshToken, expiresAt);
+        const updatedSession = await sessionRepository.updateRefreshToken(session.id, finalRefreshToken, expiresAt);
+        if (!updatedSession) {
+            throw new AuthError('Session synchronization error', 'AUTH_SESSION_ERROR', 500);
+        }
+
 
         return {
             accessToken,

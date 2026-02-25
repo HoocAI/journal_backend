@@ -11,6 +11,13 @@ try {
         // Option 1: Load from base64 env variable (for Production/GitHub/Vercel)
         const jsonString = Buffer.from(serviceAccountBase64.trim(), 'base64').toString('utf-8');
         credential = admin.credential.cert(JSON.parse(jsonString));
+    } else if (process.env.FIREBASE_PROJECT_ID && process.env.FIREBASE_CLIENT_EMAIL && process.env.FIREBASE_PRIVATE_KEY) {
+        // Option 3: Load from individual env variables
+        credential = admin.credential.cert({
+            projectId: process.env.FIREBASE_PROJECT_ID,
+            clientEmail: process.env.FIREBASE_CLIENT_EMAIL,
+            privateKey: process.env.FIREBASE_PRIVATE_KEY.replace(/\\n/g, '\n'),
+        });
     } else {
         // Option 2: Load from local file path
         const fs = require('fs');
@@ -18,7 +25,7 @@ try {
             const serviceAccount = require(serviceAccountPath);
             credential = admin.credential.cert(serviceAccount);
         } else {
-            console.warn('Firebase service account file not found and FIREBASE_SERVICE_ACCOUNT_BASE64 is also missing.');
+            console.warn('Firebase service account file not found and all Firebase env variables are also missing.');
         }
     }
 
