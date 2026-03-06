@@ -162,7 +162,7 @@ model MoodEntry {
 model Goal {
   id      String @id @default(uuid())
   userId  String
-  type    String // longTerm, shortTerm, yearly, monthly, daily
+  type    String // financial, health, career, personal, spiritual, relationships
   content String
 
   createdAt DateTime @default(now())

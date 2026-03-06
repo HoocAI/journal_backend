@@ -1,4 +1,4 @@
-import { firebaseAdmin } from '../config/firebase.config';
+import { firebaseAdmin, getFirebaseStatus } from '../config/firebase.config';
 import { prisma } from '../lib/prisma';
 
 export const notificationService = {
@@ -6,6 +6,12 @@ export const notificationService = {
      * Send a notification to a specific user
      */
     async sendToUser(userId: string, title: string, body: string, data?: any) {
+        const firebaseStatus = getFirebaseStatus();
+        if (!firebaseStatus.initialized) {
+            console.error('Cannot send notification: Firebase Admin SDK not initialized');
+            throw new Error('Notification service is currently unavailable (Firebase not initialized)');
+        }
+
         const user = await prisma.user.findUnique({
             where: { id: userId },
             select: { fcmToken: true }
@@ -35,6 +41,12 @@ export const notificationService = {
      * Send a notification to all users with an FCM token
      */
     async sendToAll(title: string, body: string, data?: any) {
+        const firebaseStatus = getFirebaseStatus();
+        if (!firebaseStatus.initialized) {
+            console.error('Cannot send notification: Firebase Admin SDK not initialized');
+            throw new Error('Notification service is currently unavailable (Firebase not initialized)');
+        }
+
         const users = await prisma.user.findMany({
             where: { fcmToken: { not: null } },
             select: { fcmToken: true }

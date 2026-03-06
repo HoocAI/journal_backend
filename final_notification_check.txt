@@ -1,0 +1,19 @@
+﻿Firebase Admin SDK initialized successfully
+--- Firebase Messaging Verification (No DB) ---
+Γ£à Firebase Admin SDK initialized successfully.
+Γ£à Firebase Messaging service is accessible.
+
+ΓÜá∩╕Å No test token provided as an argument.
+Usage: npx ts-node verify_firebase_only.ts <FCM_TOKEN>
+
+--- Firebase Verification Completed ---
+node.exe : (node:29516) [DEP0040] DeprecationWarning: The `punycode` module is deprecated. Please use 
+a userland alternative instead.
+At C:\Program Files\nodejs\npx.ps1:29 char:3
++   & $NODE_EXE $NPX_CLI_JS $args
++   ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: ((node:29516) [D...native instead.:String) [], RemoteExce 
+   ption
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+(Use `node --trace-deprecation ...` to show where the warning was created)

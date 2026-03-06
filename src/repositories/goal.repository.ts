@@ -21,6 +21,12 @@ export const goalRepository = {
         });
     },
 
+    async findAll(): Promise<GoalData[]> {
+        return prisma.goal.findMany({
+            orderBy: { createdAt: 'desc' }
+        });
+    },
+
     async update(id: string, content: string): Promise<GoalData> {
         return prisma.goal.update({
             where: { id },

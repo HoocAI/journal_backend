@@ -17,6 +17,10 @@ export const goalService = {
         return goalRepository.findByUserId(userId);
     },
 
+    async getAllGoals(): Promise<GoalData[]> {
+        return goalRepository.findAll();
+    },
+
     async updateGoal(id: string, userId: string, content: string): Promise<GoalData> {
         // Basic ownership check can be added here or in middleware
         return goalRepository.update(id, content);

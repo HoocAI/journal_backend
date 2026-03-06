@@ -8,8 +8,37 @@ import { questionService } from '../services/question';
 import { userManagementService } from '../services/admin/user-management.service';
 import { adminAudioService } from '../services/admin/admin-audio.service';
 import { adminAudioUpload, ALLOWED_AUDIO_TYPES } from '../utils/upload';
+import { getFirebaseStatus } from '../config/firebase.config';
+import { prisma } from '../lib/prisma';
 
 const router = Router();
+
+// GET /api/v1/admin/diagnostics - Check system status
+router.get(
+    '/diagnostics',
+    asyncHandler(async (_req: Request, res: Response) => {
+        const firebaseStatus = getFirebaseStatus();
+
+        // Simple DB check
+        let dbStatus = 'unknown';
+        try {
+            await prisma.$queryRaw`SELECT 1`;
+            dbStatus = 'connected';
+        } catch (err: any) {
+            dbStatus = `error: ${err.message}`;
+        }
+
+        res.status(200).json({
+            status: firebaseStatus.initialized && dbStatus === 'connected' ? 'healthy' : 'unhealthy',
+            services: {
+                firebase: firebaseStatus,
+                database: { status: dbStatus },
+                environment: process.env.NODE_ENV || 'development'
+            },
+            timestamp: new Date().toISOString()
+        });
+    })
+);
 
 // Validation schemas
 const createQuestionSetSchema = z.object({

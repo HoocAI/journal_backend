@@ -199,12 +199,17 @@ The application tracks user consistency through a streak system:
 
 - **POST /**
   - **Description**: Create a new goal.
-  - **Body**: `{ "type": "longTerm", "content": "..." }` // types: longTerm, shortTerm, yearly, monthly, daily
+  - **Body**: `{ "type": "financial", "content": "..." }` // types: financial, health, career, personal, spiritual, relationships
   - **Response**: Created goal object.
 
 - **GET /me**
   - **Description**: Get all goals for the current user.
   - **Response**: Array of goal objects.
+
+- **GET /admin/all**
+  - **Description**: Get all goals across all users.
+  - **Access**: Authenticated AND `Role: ADMIN`
+  - **Response**: Array of all goal objects, ordered by creation date descending.
 
 - **PATCH /:id**
   - **Description**: Update a specific goal's content.
