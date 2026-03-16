@@ -4,7 +4,7 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
-import { authRouter, journalRouter, moodRouter, firstMoodRouter, questionRouter, adminRouter, audioRouter, goalRouter, userRouter, visionBoardRouter, quoteRouter, affirmationRouter } from './routes';
+import { authRouter, journalRouter, moodRouter, questionRouter, adminRouter, audioRouter, goalRouter, userRouter, visionBoardRouter, quoteRouter, affirmationRouter } from './routes';
 import { AppError } from './utils/errors';
 
 dotenv.config();
@@ -28,7 +28,6 @@ app.get('/health', (_req, res) => {
 app.use('/api/v1/auth', authRouter);
 app.use('/api/v1/journal', journalRouter);
 app.use('/api/v1/mood', moodRouter);
-app.use('/api/v1/first-mood', firstMoodRouter);
 app.use('/api/v1/questions', questionRouter);
 app.use('/api/v1/admin', adminRouter);
 app.use('/api/v1/audio', audioRouter);

@@ -273,7 +273,9 @@ The application tracks user consistency through a streak system:
     ```json
     {
       "mood": "JOYFUL", // See full list below
-      "reason": "Optional reason"
+      "reason": "Optional reason",
+      "whySuchMood": "Optional context for 'Why you are in such a mood'",
+      "whyThisMood": "Optional context for 'Why u are in this mood'"
     }
     ```
   - **Response**: 
@@ -283,6 +285,8 @@ The application tracks user consistency through a streak system:
       "userId": "550e8400-e29b-41d4-a716-446655440000",
       "mood": "JOYFUL",
       "reason": "Had a great coffee with a friend",
+      "whySuchMood": "...",
+      "whyThisMood": "...",
       "entryDate": "2023-10-27T10:00:00.000Z",
       "createdAt": "2023-10-27T10:00:00.000Z"
     }
@@ -298,6 +302,8 @@ The application tracks user consistency through a streak system:
         "userId": "550e8400-e29b-41d4-a716-446655440000",
         "mood": "JOYFUL",
         "reason": "Had a great coffee with a friend",
+        "whySuchMood": "...",
+        "whyThisMood": "...",
         "entryDate": "2023-10-27T10:00:00.000Z",
         "createdAt": "2023-10-27T10:00:00.000Z"
       }
@@ -322,46 +328,7 @@ The application tracks user consistency through a streak system:
 - **Negative**: SAD, DEPRESSED, LONELY, HURT, DISAPPOINTED, ANGRY, FRUSTRATED, ANNOYED, ANXIOUS, OVERWHELMED, STRESSED, NERVOUS, INSECURE
 - **Neutral/Other**: VERY_BAD, BAD, NEUTRAL, GOOD, VERY_GOOD, TIRED, BORED, NUMB, GUILTY, ASHAMED
 
-### 3.6 First Mood (Onboarding)
-**Base Path**: `/first-mood`
-**Access**: Authenticated (`USER` or `ADMIN`)
-
-This endpoint is used to record the user's very first mood during the onboarding process. It can only be called once per user.
-
-- **POST /**
-  - **Description**: Record the user's very first mood.
-  - **Body**:
-    ```json
-    {
-      "mood": "JOYFUL",
-      "reason": "Just started my wellness journey!"
-    }
-    ```
-  - **Response (201 Created)**:
-    ```json
-    {
-      "id": "fm1e8400-e29b-41d4-a716-446655440000",
-      "userId": "550e8400-e29b-41d4-a716-446655440000",
-      "mood": "JOYFUL",
-      "reason": "Just started my wellness journey!",
-      "createdAt": "2023-10-27T10:00:00.000Z"
-    }
-    ```
-
-- **GET /me**
-  - **Description**: Get the user's first mood entry.
-  - **Response (200 OK)**:
-    ```json
-    {
-      "id": "fm1e8400-e29b-41d4-a716-446655440000",
-      "userId": "550e8400-e29b-41d4-a716-446655440000",
-      "mood": "JOYFUL",
-      "reason": "Just started my wellness journey!",
-      "createdAt": "2023-10-27T10:00:00.000Z"
-    }
-    ```
-
-### 3.7 Questions / Daily Prompt
+### 3.6 Questions / Daily Prompt
 **Base Path**: `/questions`
 **Access**: Authenticated (`USER` or `ADMIN`)
 

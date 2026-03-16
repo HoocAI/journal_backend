@@ -3,14 +3,22 @@ import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3
 import { getSignedUrl as awsGetSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { UploadError } from './errors';
 
-// Initialize S3 Client
-const s3Client = new S3Client({
-    region: process.env.AWS_REGION,
-    credentials: {
-        accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
-        secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
-    },
-});
+// Initialize S3 Client lazily to ensure environment variables are loaded
+let s3ClientInstance: S3Client | null = null;
+
+function getS3Client(): S3Client {
+    if (!s3ClientInstance) {
+        s3ClientInstance = new S3Client({
+            region: process.env.AWS_REGION || 'ap-south-1',
+            credentials: {
+                accessKeyId: process.env.AWS_ACCESS_KEY_ID || '',
+                secretAccessKey: process.env.AWS_SECRET_ACCESS_KEY || '',
+            },
+        });
+    }
+    return s3ClientInstance;
+}
+
 
 const SIGNED_URL_EXPIRY = 3600; // 1 hour in seconds
 
@@ -40,7 +48,7 @@ export async function uploadFileToS3(
     });
 
     try {
-        await s3Client.send(command);
+        await getS3Client().send(command);
         // Return the S3 key — we'll generate pre-signed URLs when serving
         return `https://${bucketName}.s3.${process.env.AWS_REGION}.amazonaws.com/${key}`;
     } catch (error: any) {
@@ -70,7 +78,7 @@ export async function getSignedUrl(
         Key: s3Key,
     });
 
-    return awsGetSignedUrl(s3Client, command, { expiresIn });
+    return awsGetSignedUrl(getS3Client(), command, { expiresIn });
 }
 
 /**

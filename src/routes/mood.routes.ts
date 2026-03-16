@@ -20,6 +20,8 @@ const MoodTypeEnum = z.enum([
 const createMoodSchema = z.object({
     mood: MoodTypeEnum,
     reason: z.string().optional(),
+    whySuchMood: z.string().optional(),
+    whyThisMood: z.string().optional(),
 });
 
 router.use(requireAuth());
@@ -36,7 +38,9 @@ router.post(
 
         const entry = await moodService.createEntry(req.user!.userId, {
             mood: parseResult.data.mood,
-            reason: parseResult.data.reason
+            reason: parseResult.data.reason,
+            whySuchMood: parseResult.data.whySuchMood,
+            whyThisMood: parseResult.data.whyThisMood,
         });
 
         res.status(201).json(entry);

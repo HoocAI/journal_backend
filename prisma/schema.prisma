@@ -99,7 +99,6 @@ model User {
   answers        QuestionAnswer[]
   goals          Goal[]
   visionBoards   VisionBoard[]
-  firstMoodEntry FirstMoodEntry?
   fcmToken       String?
 }
 
@@ -146,11 +145,13 @@ model JournalEntry {
 }
 
 model MoodEntry {
-  id        String   @id @default(uuid())
-  userId    String
-  mood      MoodType
-  reason    String?
-  entryDate DateTime // Still using entryDate for indexing, but can be multiple per day if we change unique constraint
+  id           String   @id @default(uuid())
+  userId       String
+  mood         MoodType
+  reason       String?
+  whySuchMood  String?
+  whyThisMood  String?
+  entryDate    DateTime // Still using entryDate for indexing, but can be multiple per day if we change unique constraint
 
   createdAt DateTime @default(now())
 
@@ -256,15 +257,5 @@ model VisionBoardImage {
   board VisionBoard @relation(fields: [visionBoardId], references: [id], onDelete: Cascade)
 
   @@index([visionBoardId])
-}
-
-model FirstMoodEntry {
-  id        String   @id @default(uuid())
-  userId    String   @unique  // only one first-mood per user
-  mood      MoodType
-  reason    String?
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
 

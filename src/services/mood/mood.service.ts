@@ -5,6 +5,8 @@ import { moodRepository } from '../../repositories/mood.repository';
 export interface CreateMoodInput {
     mood: MoodType;
     reason?: string;
+    whySuchMood?: string;
+    whyThisMood?: string;
 }
 
 export const moodService = {
@@ -18,6 +20,8 @@ export const moodService = {
             userId,
             mood: input.mood,
             reason: input.reason,
+            whySuchMood: input.whySuchMood,
+            whyThisMood: input.whyThisMood,
             entryDate: today,
         });
     },
