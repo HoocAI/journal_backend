@@ -201,4 +201,13 @@ export const userRepository = {
             data: { isActive },
         });
     },
+
+    /**
+     * Deletes a user by ID
+     */
+    async deleteById(userId: string): Promise<UserData> {
+        return prisma.user.delete({
+            where: { id: userId },
+        });
+    },
 };

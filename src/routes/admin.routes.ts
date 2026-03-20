@@ -142,6 +142,20 @@ router.patch(
     })
 );
 
+// DELETE /api/v1/admin/users/:userId - Delete a user
+router.delete(
+    '/users/:userId',
+    asyncHandler(async (req: Request, res: Response) => {
+        const parseResult = userIdParamSchema.safeParse(req.params);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        await userManagementService.deleteUser(parseResult.data.userId);
+        res.status(204).send();
+    })
+);
+
 // POST /api/v1/admin/audio - Upload new admin audio
 router.post(
     '/audio',
