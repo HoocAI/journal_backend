@@ -1,9 +1,3 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client-js"
 }
@@ -11,6 +5,215 @@ generator client {
 datasource db {
   provider = "postgresql"
   url      = env("DATABASE_URL")
+}
+
+model User {
+  id                  String             @id @default(uuid())
+  email               String             @unique
+  googleId            String?            @unique
+  passwordHash        String
+  role                Role               @default(USER)
+  plan                Plan               @default(TRIAL)
+  trialEndsAt         DateTime?
+  isActive            Boolean            @default(true)
+  createdAt           DateTime           @default(now())
+  updatedAt           DateTime           @updatedAt
+  age                 Int?
+  focus               String[]
+  language            String?
+  name                String?
+  timezone            String?
+  phone               String?            @unique
+  goalsSet            Boolean            @default(false)
+  onboardingCompleted Boolean            @default(false)
+  isEmailVerified     Boolean            @default(false)
+  isPhoneVerified     Boolean            @default(false)
+  coins               Int                @default(0)
+  currentStreak       Int                @default(0)
+  lastEntryDate       DateTime?
+  longestStreak       Int                @default(0)
+  fcmToken            String?
+  AssessmentResult    AssessmentResult[]
+  consent             Consent?
+  goals               Goal[]
+  journalEntries      JournalEntry[]
+  moods               MoodEntry[]
+  answers             QuestionAnswer[]
+  sessions            Session[]
+  visionBoards        VisionBoard[]
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  userId       String
+  refreshToken String   @unique
+  expiresAt    DateTime
+  createdAt    DateTime @default(now())
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model Consent {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  termsAccepted     Boolean
+  privacyAccepted   Boolean
+  recordingAccepted Boolean  @default(false)
+  acceptedAt        DateTime @default(now())
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model JournalEntry {
+  id        String   @id @default(uuid())
+  userId    String
+  content   String
+  photoUrl  String?
+  audioUrl  String?
+  entryDate DateTime
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, entryDate])
+}
+
+model MoodEntry {
+  id          String   @id @default(uuid())
+  userId      String
+  mood        MoodType
+  reason      String?
+  entryDate   DateTime
+  createdAt   DateTime @default(now())
+  whySuchMood String?
+  whyThisMood String?
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, entryDate])
+}
+
+model Goal {
+  id          String    @id @default(uuid())
+  userId      String
+  type        String
+  content     String
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  deadline    DateTime?
+  isAutomated Boolean   @default(false)
+  targetValue String?
+  templateKey String?
+  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model QuestionSet {
+  id        String     @id @default(uuid())
+  title     String
+  startDate DateTime
+  createdAt DateTime   @default(now())
+  questions Question[]
+}
+
+model Question {
+  id            String           @id @default(uuid())
+  questionSetId String
+  text          String
+  order         Int
+  questionSet   QuestionSet      @relation(fields: [questionSetId], references: [id])
+  answers       QuestionAnswer[]
+
+  @@unique([questionSetId, order])
+}
+
+model QuestionAnswer {
+  id         String   @id @default(uuid())
+  userId     String
+  questionId String
+  answer     String
+  createdAt  DateTime @default(now())
+  answerDate DateTime
+  question   Question @relation(fields: [questionId], references: [id])
+  user       User     @relation(fields: [userId], references: [id])
+
+  @@unique([userId, answerDate])
+}
+
+model AdminAudio {
+  id        String   @id @default(uuid())
+  title     String
+  audioUrl  String
+  createdAt DateTime @default(now())
+}
+
+model Quote {
+  id        String   @id @default(uuid())
+  text      String
+  author    String?
+  mood      MoodType
+  createdAt DateTime @default(now())
+}
+
+model Affirmation {
+  id        String   @id @default(uuid())
+  text      String
+  author    String?
+  mood      MoodType
+  createdAt DateTime @default(now())
+}
+
+model VisionBoard {
+  id        String             @id @default(uuid())
+  userId    String
+  name      String
+  createdAt DateTime           @default(now())
+  updatedAt DateTime           @updatedAt
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  images    VisionBoardImage[]
+
+  @@unique([userId, name])
+  @@index([userId])
+}
+
+model VisionBoardImage {
+  id            String      @id @default(uuid())
+  visionBoardId String
+  url           String
+  s3Key         String
+  createdAt     DateTime    @default(now())
+  board         VisionBoard @relation(fields: [visionBoardId], references: [id], onDelete: Cascade)
+
+  @@index([visionBoardId])
+}
+
+model AssessmentResult {
+  id              String   @id
+  userId          String
+  type            String
+  finalScore      Float
+  dimensionScores Json
+  createdAt       DateTime @default(now())
+  User            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+model BreathingPattern {
+  id        String   @id
+  mood      String   @unique
+  inhaleSec Int
+  holdSec   Int
+  exhaleSec Int
+  cycles    Int
+  createdAt DateTime @default(now())
+}
+
+model EmotionalPrompt {
+  id        String   @id
+  text      String
+  category  String?
+  createdAt DateTime @default(now())
 }
 
 enum Role {
@@ -30,7 +233,6 @@ enum MoodType {
   NEUTRAL
   GOOD
   VERY_GOOD
-  // Floral App Moods
   JOYFUL
   EXCITED
   PROUD
@@ -59,203 +261,3 @@ enum MoodType {
   GUILTY
   ASHAMED
 }
-
-model User {
-  id           String @id @default(uuid())
-  email        String @unique
-  phone        String? @unique
-  passwordHash String
-  role         Role   @default(USER)
-
-  // Profile Details
-  name     String?
-  age      Int?
-  language String?
-  timezone String?
-  focus    String[]
-
-  plan        Plan      @default(TRIAL)
-  trialEndsAt DateTime?
-  isActive    Boolean   @default(true)
-
-  onboardingCompleted Boolean @default(false)
-  goalsSet            Boolean @default(false)
-  isEmailVerified     Boolean @default(false)
-  isPhoneVerified     Boolean @default(false)
-
-  // Streak and Wallet
-  currentStreak  Int       @default(0)
-  longestStreak  Int       @default(0)
-  lastEntryDate  DateTime?
-  coins          Int       @default(0)
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  sessions       Session[]
-  consent        Consent?
-  journalEntries JournalEntry[]
-  moods          MoodEntry[]
-  answers        QuestionAnswer[]
-  goals          Goal[]
-  visionBoards   VisionBoard[]
-  fcmToken       String?
-}
-
-model Session {
-  id           String   @id @default(uuid())
-  userId       String
-  refreshToken String   @unique
-  expiresAt    DateTime
-  createdAt    DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-model Consent {
-  id     String @id @default(uuid())
-  userId String @unique
-
-  termsAccepted     Boolean
-  privacyAccepted   Boolean
-  recordingAccepted Boolean @default(false)
-
-  acceptedAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-}
-
-model JournalEntry {
-  id       String  @id @default(uuid())
-  userId   String
-  content  String
-  photoUrl String?
-  audioUrl String?
-
-  entryDate DateTime
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@unique([userId, entryDate])
-}
-
-model MoodEntry {
-  id           String   @id @default(uuid())
-  userId       String
-  mood         MoodType
-  reason       String?
-  whySuchMood  String?
-  whyThisMood  String?
-  entryDate    DateTime // Still using entryDate for indexing, but can be multiple per day if we change unique constraint
-
-  createdAt DateTime @default(now())
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId, entryDate])
-}
-
-model Goal {
-  id      String @id @default(uuid())
-  userId  String
-  type    String // financial, health, career, personal, spiritual, relationships
-  content String
-
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
-}
-
-model QuestionSet {
-  id        String   @id @default(uuid())
-  title     String
-  startDate DateTime
-  createdAt DateTime @default(now())
-
-  questions Question[]
-}
-
-model Question {
-  id            String @id @default(uuid())
-  questionSetId String
-  text          String
-  order         Int
-
-  questionSet QuestionSet      @relation(fields: [questionSetId], references: [id])
-  answers     QuestionAnswer[]
-
-  @@unique([questionSetId, order])
-}
-
-model QuestionAnswer {
-  id         String   @id @default(uuid())
-  userId     String
-  questionId String
-  answer     String
-  answerDate DateTime
-
-  createdAt DateTime @default(now())
-
-  user     User     @relation(fields: [userId], references: [id])
-  question Question @relation(fields: [questionId], references: [id])
-
-  @@unique([userId, answerDate]) // one answer per day
-}
-
-model AdminAudio {
-  id        String   @id @default(uuid())
-  title     String
-  audioUrl  String
-  createdAt DateTime @default(now())
-}
-
-model Quote {
-  id        String   @id @default(uuid())
-  text      String
-  author    String?
-  mood      MoodType
-  createdAt DateTime @default(now())
-}
-
-model Affirmation {
-  id        String   @id @default(uuid())
-  text      String
-  author    String?
-  mood      MoodType
-  createdAt DateTime @default(now())
-}
-
-model VisionBoard {
-  id        String   @id @default(uuid())
-  userId    String
-  name      String
-  createdAt DateTime @default(now())
-  updatedAt DateTime @updatedAt
-
-  user   User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  images VisionBoardImage[]
-
-  @@unique([userId, name])
-  @@index([userId])
-}
-
-model VisionBoardImage {
-  id            String   @id @default(uuid())
-  visionBoardId String
-  url           String
-  s3Key         String
-  createdAt     DateTime @default(now())
-
-  board VisionBoard @relation(fields: [visionBoardId], references: [id], onDelete: Cascade)
-
-  @@index([visionBoardId])
-}
-

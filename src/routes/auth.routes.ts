@@ -49,12 +49,18 @@ const adminLoginSchema = z.object({
 router.post(
     '/google',
     asyncHandler(async (req: Request, res: Response) => {
+        const timestamp = new Date().toISOString();
+        console.log(`[${timestamp}] [AuthRoute] Incoming Google Login Request. IP: ${req.ip}`);
+        
         const parseResult = googleLoginSchema.safeParse(req.body);
         if (!parseResult.success) {
+            console.warn(`[${timestamp}] [AuthRoute] Validation failed:`, parseResult.error.flatten().fieldErrors);
             throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
         }
 
-        const result = await authService.googleLogin(parseResult.data.idToken);
+        const result = await authService.googleLogin({ idToken: parseResult.data.idToken });
+        const resolvedId = 'userId' in result ? result.userId : result.user?.id;
+        console.log(`[${timestamp}] [AuthRoute] Success: Issue ${'provisionalToken' in result ? 'Provisional' : 'Full Access'} token for UID: ${resolvedId}`);
 
         res.status(200).json(result);
     })
@@ -127,15 +133,19 @@ router.post(
     '/verify-phone',
     requireProvisionalAuth(),
     asyncHandler(async (req: Request, res: Response) => {
+        const timestamp = new Date().toISOString();
+        const userId = req.user!.userId;
+        console.log(`[${timestamp}] [AuthRoute] Incoming Phone Verification Request for UID: ${userId}. IP: ${req.ip}`);
+
         const parseResult = verifyPhoneSchema.safeParse(req.body);
         if (!parseResult.success) {
+            console.warn(`[${timestamp}] [AuthRoute] Validation failed:`, parseResult.error.flatten().fieldErrors);
             throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
         }
 
-        const userId = req.user!.userId;
         const { phone, otp } = parseResult.data;
-
         const tokenPair = await authService.verifyPhone(userId, phone, otp);
+        console.log(`[${timestamp}] [AuthRoute] Success: Full Session established for UID: ${userId} (${phone})`);
 
         res.status(200).json({
             accessToken: tokenPair.accessToken,

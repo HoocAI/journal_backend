@@ -14,6 +14,7 @@ export interface UserData {
     goalsSet: boolean;
     isEmailVerified: boolean;
     isPhoneVerified: boolean;
+    googleId: string | null;
     name: string | null;
     age: number | null;
     language: string | null;
@@ -29,6 +30,7 @@ export interface UserData {
 
 export interface CreateUserInput {
     email: string;
+    googleId?: string;
     phone?: string;
     passwordHash: string;
     role?: Role;
@@ -58,6 +60,7 @@ export const userRepository = {
         const user = await prisma.user.create({
             data: {
                 email: input.email.toLowerCase(),
+                googleId: input.googleId,
                 phone: input.phone,
                 passwordHash: input.passwordHash,
                 role: input.role,
@@ -88,6 +91,15 @@ export const userRepository = {
     async findByEmail(email: string): Promise<UserData | null> {
         return prisma.user.findUnique({
             where: { email: email.toLowerCase() },
+        });
+    },
+
+    /**
+     * Finds a user by Google ID
+     */
+    async findByGoogleId(googleId: string): Promise<UserData | null> {
+        return prisma.user.findUnique({
+            where: { googleId },
         });
     },
 

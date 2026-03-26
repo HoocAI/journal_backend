@@ -19,8 +19,9 @@ import type { TokenPair, LoginCredentials, PremiumStatus, TrialInfo } from '../.
 const SALT_ROUNDS = 10;
 const TRIAL_DURATION_DAYS = parseInt(process.env.TRIAL_DURATION_DAYS ?? '21', 10);
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
-const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
 
 export interface ProvisionalResponse {
     provisionalToken: string;
@@ -40,30 +41,65 @@ export const authService = {
      * and returns a short-lived provisional token.
      * No session is created yet.
      */
-    async googleLogin(idToken: string): Promise<ProvisionalResponse | TokenPair> {
+    async googleLogin(params: { idToken?: string; code?: string; redirectUri?: string }): Promise<ProvisionalResponse | TokenPair> {
+        const { idToken, code, redirectUri } = params;
+        console.log(`[AuthService] Initiating Google login. Type: ${code ? 'Auth Code' : 'ID Token'}`);
+
         if (!GOOGLE_CLIENT_ID) {
+            console.error('[AuthService] CRITICAL: Google Client ID not configured');
             throw new AuthError('Google Client ID not configured', 'AUTH_CONFIG_ERROR', 500);
         }
 
         let payload;
         try {
-            const ticket = await googleClient.verifyIdToken({
-                idToken,
-                audience: GOOGLE_CLIENT_ID,
-            });
-            payload = ticket.getPayload();
-        } catch {
+            if (code) {
+                // Scenario A: Authorization Code Flow
+                const { tokens } = await googleClient.getToken({
+                    code,
+                    redirect_uri: redirectUri || 'postmessage' // 'postmessage' is standard for Flutter/Web direct exchange
+                });
+                const ticket = await googleClient.verifyIdToken({
+                    idToken: tokens.id_token!,
+                    audience: GOOGLE_CLIENT_ID,
+                });
+                payload = ticket.getPayload();
+            } else if (idToken) {
+                // Scenario B: Direct ID Token Flow
+                const ticket = await googleClient.verifyIdToken({
+                    idToken,
+                    audience: GOOGLE_CLIENT_ID,
+                });
+                payload = ticket.getPayload();
+            } else {
+                throw new AuthError('Missing authentication token/code', 'AUTH_INVALID_TOKEN');
+            }
+            console.log(`[AuthService] Token verified for email: ${payload?.email}`);
+        } catch (err: any) {
+            console.error('[AuthService] Google verification failed:', err.message);
             throw new AuthError('Invalid Google token', 'AUTH_INVALID_TOKEN');
         }
 
-        if (!payload || !payload.email) {
-            throw new AuthError('Google token missing email', 'AUTH_INVALID_TOKEN');
+        if (!payload || !payload.email || !payload.sub) {
+            throw new AuthError('Google token missing email or ID', 'AUTH_INVALID_TOKEN');
         }
 
         const email = payload.email.toLowerCase();
-        let user = await userRepository.findByEmail(email);
+        const googleId = payload.sub;
+
+        // Try finding by Google ID first
+        let user = await userRepository.findByGoogleId(googleId);
+
+        // Fallback to email for older accounts not yet linked
+        if (!user) {
+            user = await userRepository.findByEmail(email);
+            if (user) {
+                console.log(`[AuthService] Linking Google ID to existing user: ${email}`);
+                user = await userRepository.update(user.id, { googleId });
+            }
+        }
 
         if (!user) {
+            console.log(`[AuthService] New user detected: ${email}. Creating account...`);
             // New user — create account (no session yet)
             const trialEndsAt = new Date();
             trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DURATION_DAYS);
@@ -72,6 +108,7 @@ export const authService = {
                 const newUser = await tx.user.create({
                     data: {
                         email,
+                        googleId,
                         passwordHash: await bcrypt.hash(Math.random().toString(36), SALT_ROUNDS),
                         role: 'USER',
                         plan: 'TRIAL',
@@ -95,21 +132,31 @@ export const authService = {
         } else {
             // Existing user — mark email as verified if not already
             if (!user.isEmailVerified) {
+                console.log(`[AuthService] Mark existing user ${email} as email verified`);
                 user = await userRepository.update(user.id, { isEmailVerified: true });
             }
 
             if (!user.isActive) {
+                console.warn(`[AuthService] Deactivated user attempted login: ${email}`);
                 throw new AuthError('Account is deactivated', 'AUTH_ACCOUNT_DEACTIVATED');
             }
+            console.log(`[AuthService] User found: ${email}`);
+        }
+
+        if (!user) {
+            throw new AuthError('Failed to identify or create user', 'AUTH_INTERNAL_ERROR', 500);
         }
 
         // If user is already phone verified, log them in directly
         if (user.isPhoneVerified) {
+            console.log(`[AuthService] User ${email} (ID: ${user.id}) is already phone verified. Proceeding to create session.`);
             return this.createSession(user.id);
         }
 
+        console.log(`[AuthService] User ${email} (ID: ${user.id}) requires phone verification. Generating short-lived provisional token.`);
         const provisionalToken = generateProvisionalToken({ userId: user.id });
 
+        console.log(`[AuthService] Provisional flow completed for ${email}. Returning token.`);
         return {
             provisionalToken,
             requiresPhoneVerification: true,
@@ -369,6 +416,8 @@ export const authService = {
             sessionId: session.id,
             isPremium,
         });
+
+        console.log(`[AuthService] Session created successfully. SessionID: ${session.id}, UserID: ${user.id}`);
 
         const finalRefreshToken = generateRefreshToken({
             userId: user.id,
