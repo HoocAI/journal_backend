@@ -45,8 +45,8 @@ The application tracks user consistency through a streak system:
 
 #### Endpoints
 
-- **POST /google** (Login or Signup)
-  - **Description**: Universal Google entry point.
+- **POST /google** (Step 1: Universal Login or Signup)
+  - **Description**: Verifies Google ID token. Existing verified users get full access tokens. New or unverified users get a `provisionalToken` and must proceed to **Step 2 (Verify Phone)**.
   - **Body**: `{ "idToken": "..." }`
   - **Response (Scenario A: New/Unverified User)**:
     ```json
@@ -188,7 +188,9 @@ The application tracks user consistency through a streak system:
       "age": 28,
       "language": "English",
       "timezone": "UTC+5:30",
-      "focus": ["Inner Peace 🕊️", "Self Growth 🌱"]
+      "focus": ["Inner Peace 🕊️", "Self Growth 🌱"],
+      "onboardingCompleted": true,
+      "goalsSet": true
     }
     ```
   - **Response**: Updated user object.
@@ -262,6 +264,16 @@ The application tracks user consistency through a streak system:
       }
     ]
     ```
+
+- **GET /date/:date**
+  - **Description**: Get entry for a specific date (YYYY-MM-DD).
+  - **Response**: Single journal entry object or null.
+
+- **PATCH /:id**
+  - **Description**: Update a journal entry. Supports file/audio updates.
+  - **Format**: `multipart/form-data`
+  - **Fields**: `content` (optional text), `photo` (optional file), `audio` (optional file).
+  - **Response**: Updated journal entry object.
 
 ### 3.5 Mood
 **Base Path**: `/mood`
@@ -529,6 +541,17 @@ Vision boards let users create named boards and upload inspiration images (store
 **Base Path**: `/admin`
 **Access**: Authenticated AND `Role: ADMIN`
 
+- **GET /diagnostics**
+  - **Description**: Check system status (Firebase, Database, Env).
+  - **Response**: 
+    ```json
+    {
+      "status": "healthy",
+      "services": { "firebase": { "initialized": true }, "database": { "status": "connected" } },
+      "timestamp": "2023-10-27T10:00:00.000Z"
+    }
+    ```
+
 - **POST /quotes**
   - **Description**: Create a new quote.
   - **Body**: 
@@ -683,6 +706,10 @@ Vision boards let users create named boards and upload inspiration images (store
 
 - **PATCH /users/:userId/enable**
   - **Description**: Enable a user account.
+
+- **DELETE /users/:userId**
+  - **Description**: Permanently delete a user account and all associated data.
+  - **Response**: 204 No Content.
 
 - **POST /audio**
   - **Description**: Upload new audio content for users.
