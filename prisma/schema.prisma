@@ -103,7 +103,8 @@ model Goal {
   isAutomated Boolean   @default(false)
   targetValue String?
   templateKey String?
-  user        User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  AssessmentResult AssessmentResult[]
 
   @@index([userId])
 }
@@ -188,15 +189,20 @@ model VisionBoardImage {
 }
 
 model AssessmentResult {
-  id              String   @id
+  id              String   @id @default(uuid())
   userId          String
+  goalId          String
   type            String
   finalScore      Float
   dimensionScores Json
+  customerLevel   String?
+  adminLevel      String?
   createdAt       DateTime @default(now())
   User            User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  Goal            Goal     @relation(fields: [goalId], references: [id], onDelete: Cascade)
 
   @@index([userId])
+  @@index([goalId])
 }
 
 model BreathingPattern {

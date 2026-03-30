@@ -201,7 +201,7 @@ The application tracks user consistency through a streak system:
 
 - **POST /**
   - **Description**: Create a new goal.
-  - **Body**: `{ "type": "financial", "content": "..." }` // types: financial, health, career, personal, spiritual, relationships
+  - **Body**: `{ "type": "financial", "content": "..." }` // types: financial, health, career, personal, spiritual, relationships, social
   - **Response**: Created goal object.
 
 - **GET /me**
@@ -729,6 +729,96 @@ Vision boards let users create named boards and upload inspiration images (store
       }
     ]
     ```
+
+
+### 3.13 Assessments (NLP Manifestation)
+**Base Path**: `/assessments`
+**Access**: Authenticated (`USER` or `ADMIN`)
+
+- **POST /quick**
+  - **Description**: Submit a quick 10-question assessment (scale 1-10) to determine Goal Alignment & Manifestation Readiness.
+  - **Body**:
+    ```json
+    {
+      "goalId": "e2e8400-e29b-41d4-a716-446655440000",
+      "answers": {
+        "neurological_alignment": 8,
+        "submodalities_clarity": 7,
+        "meta_program_drive": 9,
+        "anchoring_strength": 10,
+        "internal_alignment": 8,
+        "strategy_pattern": 6,
+        "language_filters": 7,
+        "timeline_orientation": 8,
+        "ecology_balance": 9,
+        "emotional_state": 8
+      }
+    }
+    ```
+  - **Response**: 
+    ```json
+    {
+      "id": "ar1e8400-e29b-41d4-a716-446655440000",
+      "goalName": "My Goal Title",
+      "finalScore": 81.5,
+      "manifestationReadinessPercent": 81.5,
+      "resultLevel": "🙂 Growth Zone",
+      "topStrength": "Anchoring Strength",
+      "improvementArea": "Strategy Pattern",
+      "shortInsight": "You are making good progress, but there's room for growth.",
+      "cta": "Sometimes the biggest shifts happen at the identity level — Advanced Assessment reveals what’s happening beneath your answers. 👉 Unlock Advanced Analysis",
+      "secondaryButton": "Maybe Later",
+      "adminMetrics": {
+        "identity_congruency_index": 80,
+        "state_power_index": 90,
+        "clarity_index": 70
+      }
+    }
+    ```
+
+- **POST /advanced**
+  - **Description**: Submit the advanced 50-question assessment (grouped by 10 dimensions, 5 questions each, scale 1-10).
+  - **Body**:
+    ```json
+    {
+      "goalId": "e2e8400-e29b-41d4-a716-446655440000",
+      "sectionAnswers": {
+        "neurological_alignment": [8, 7, 9, 10, 8],
+        "submodalities_clarity": [7, 7, 8, 9, 6],
+        "meta_program_drive": [9, 8, 9, 8, 9],
+        "anchoring_strength": [10, 9, 10, 8, 9],
+        "internal_alignment": [8, 8, 8, 7, 9],
+        "strategy_pattern": [6, 5, 7, 6, 8],
+        "language_filters": [7, 8, 7, 6, 7],
+        "timeline_orientation": [8, 9, 8, 7, 8],
+        "ecology_balance": [9, 9, 8, 9, 10],
+        "emotional_state": [8, 7, 8, 9, 8]
+      }
+    }
+    ```
+  - **Response**: 
+    ```json
+    {
+      "id": "ar2e8400-e29b-41d4-a716-446655440000",
+      "goalName": "My Goal Title",
+      "finalScore": 76.5,
+      "manifestationReadinessPercent": 76.5,
+      "resultLevel": "🟢 Alignment Zone",
+      "topStrength": "Anchoring Strength",
+      "improvementArea": "Strategy Pattern",
+      "shortInsight": "High probability of success, strong alignment.",
+      "cta": "Ready to turn these insights into real progress? Book your consultation now.",
+      "adminMetrics": {
+        "identity_congruency_index": 78,
+        "state_power_index": 85,
+        "clarity_index": 68
+      }
+    }
+    ```
+
+- **GET /history**
+  - **Description**: Get all past assessment results for the authenticated user.
+  - **Response**: Array of `AssessmentResult` objects.
 
 
 4. Error Handling
