@@ -9,7 +9,7 @@ import { goalService } from '../services/goal';
 
 const router = Router();
 
-const GOAL_TYPES = ['financial', 'health', 'career', 'personal', 'spiritual', 'relationships'] as const;
+const GOAL_TYPES = ['financial', 'health', 'career', 'personal', 'spiritual', 'relationships', 'social'] as const;
 
 const createGoalSchema = z.object({
     type: z.enum(GOAL_TYPES),
