@@ -19,6 +19,7 @@ export interface UserData {
     age: number | null;
     language: string | null;
     timezone: string | null;
+    gender: string | null;
     focus: string[];
     currentStreak: number;
     longestStreak: number;

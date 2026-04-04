@@ -23,6 +23,7 @@ model User {
   language            String?
   name                String?
   timezone            String?
+  gender              String?
   phone               String?            @unique
   goalsSet            Boolean            @default(false)
   onboardingCompleted Boolean            @default(false)

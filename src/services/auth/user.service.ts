@@ -6,6 +6,7 @@ export interface UpdateProfileInput {
     age?: number;
     language?: string;
     timezone?: string;
+    gender?: string;
     focus?: string[];
     onboardingCompleted?: boolean;
     goalsSet?: boolean;

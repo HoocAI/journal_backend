@@ -13,6 +13,7 @@ const updateProfileSchema = z.object({
     age: z.number().optional(),
     language: z.string().optional(),
     timezone: z.string().optional(),
+    gender: z.string().optional(),
     focus: z.array(z.string()).optional(),
     onboardingCompleted: z.boolean().optional(),
     goalsSet: z.boolean().optional(),
