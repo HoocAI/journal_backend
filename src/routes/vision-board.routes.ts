@@ -122,7 +122,7 @@ router.post(
 
         const file = req.file;
         const filename = generateFilename(userId, file.originalname);
-        const s3Key = `vision-board/${boardId}/${filename}`;
+        const s3Key = `manifest/${boardId}/${filename}`;
 
         const url = await uploadFileToS3(file.buffer, s3Key, file.mimetype);
 

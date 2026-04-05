@@ -511,7 +511,7 @@ Vision boards let users create named boards and upload inspiration images (store
           "id": "vi1e8400-e29b-41d4-a716-446655440000",
           "visionBoardId": "vb1e8400-e29b-41d4-a716-446655440000",
           "url": "https://s3.amazonaws.com/...?X-Amz-Signature=...",
-          "s3Key": "vision-board/vb1.../image.jpg",
+          "s3Key": "manifest/vb1.../image.jpg",
           "createdAt": "2023-10-27T10:00:00.000Z"
         }
       ]
@@ -528,7 +528,7 @@ Vision boards let users create named boards and upload inspiration images (store
       "id": "vi1e8400-e29b-41d4-a716-446655440000",
       "visionBoardId": "vb1e8400-e29b-41d4-a716-446655440000",
       "url": "https://s3.amazonaws.com/...?X-Amz-Signature=...",
-      "s3Key": "vision-board/vb1.../image.jpg",
+      "s3Key": "manifest/vb1.../image.jpg",
       "createdAt": "2023-10-27T10:00:00.000Z"
     }
     ```
