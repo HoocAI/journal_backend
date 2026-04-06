@@ -75,7 +75,7 @@ router.patch(
  
         const file = req.file;
         const filename = generateFilename(userId, file.originalname);
-        const s3Key = `profile/${userId}/${filename}`; // Separated folder for profile images
+        const s3Key = `manifest/profile/${userId}/${filename}`; // Use manifest/ prefix as it is allowed in IAM policy
  
         // Upload to S3
         const publicUrl = await uploadFileToS3(file.buffer, s3Key, file.mimetype);
