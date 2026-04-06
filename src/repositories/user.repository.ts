@@ -25,6 +25,8 @@ export interface UserData {
     longestStreak: number;
     lastEntryDate: Date | null;
     coins: number;
+    photoUrl: string | null;
+    photoS3Key: string | null;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -74,7 +76,7 @@ export const userRepository = {
             },
         });
 
-        return user;
+        return user as unknown as UserData;
     },
 
     /**
@@ -83,7 +85,7 @@ export const userRepository = {
     async findById(userId: string): Promise<UserData | null> {
         return prisma.user.findUnique({
             where: { id: userId },
-        });
+        }) as unknown as Promise<UserData | null>;
     },
 
     /**
@@ -92,7 +94,7 @@ export const userRepository = {
     async findByEmail(email: string): Promise<UserData | null> {
         return prisma.user.findUnique({
             where: { email: email.toLowerCase() },
-        });
+        }) as unknown as Promise<UserData | null>;
     },
 
     /**
@@ -101,7 +103,7 @@ export const userRepository = {
     async findByGoogleId(googleId: string): Promise<UserData | null> {
         return prisma.user.findUnique({
             where: { googleId },
-        });
+        }) as unknown as Promise<UserData | null>;
     },
 
     /**
@@ -110,7 +112,7 @@ export const userRepository = {
     async findByPhone(phone: string): Promise<UserData | null> {
         return prisma.user.findUnique({
             where: { phone },
-        });
+        }) as unknown as Promise<UserData | null>;
     },
 
     /**
@@ -122,7 +124,7 @@ export const userRepository = {
                 email: email.toLowerCase(),
                 role: 'ADMIN',
             },
-        });
+        }) as unknown as Promise<UserData | null>;
     },
 
     /**
@@ -132,7 +134,7 @@ export const userRepository = {
         return prisma.user.update({
             where: { id: userId },
             data,
-        }) as Promise<UserData>;
+        }) as unknown as Promise<UserData>;
     },
 
     /**
@@ -202,7 +204,7 @@ export const userRepository = {
     async findAllNonAdminUsers(): Promise<UserData[]> {
         return prisma.user.findMany({
             where: { role: { not: 'ADMIN' } },
-        });
+        }) as unknown as Promise<UserData[]>;
     },
 
     /**
@@ -212,7 +214,7 @@ export const userRepository = {
         return prisma.user.update({
             where: { id: userId },
             data: { isActive },
-        });
+        }) as unknown as Promise<UserData>;
     },
 
     /**
@@ -221,6 +223,6 @@ export const userRepository = {
     async deleteById(userId: string): Promise<UserData> {
         return prisma.user.delete({
             where: { id: userId },
-        });
+        }) as unknown as Promise<UserData>;
     },
 };

@@ -34,6 +34,8 @@ model User {
   lastEntryDate       DateTime?
   longestStreak       Int                @default(0)
   fcmToken            String?
+  photoUrl            String?
+  photoS3Key          String?
   AssessmentResult    AssessmentResult[]
   consent             Consent?
   goals               Goal[]
