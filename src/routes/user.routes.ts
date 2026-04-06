@@ -75,7 +75,8 @@ router.patch(
  
         const file = req.file;
         const filename = generateFilename(userId, file.originalname);
-        const s3Key = `manifest/profile/${userId}/${filename}`; // Use manifest/ prefix as it is allowed in IAM policy
+        const folder = process.env.AWS_UPLOAD_FOLDER || 'manifest';
+        const s3Key = `${folder}/profile/${userId}/${filename}`; // Use configured prefix
  
         // Upload to S3
         const publicUrl = await uploadFileToS3(file.buffer, s3Key, file.mimetype);

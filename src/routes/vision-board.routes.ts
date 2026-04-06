@@ -122,7 +122,8 @@ router.post(
 
         const file = req.file;
         const filename = generateFilename(userId, file.originalname);
-        const s3Key = `manifest/${boardId}/${filename}`;
+        const folder = process.env.AWS_UPLOAD_FOLDER || 'manifest';
+        const s3Key = `${folder}/${boardId}/${filename}`;
 
         const url = await uploadFileToS3(file.buffer, s3Key, file.mimetype);
 
