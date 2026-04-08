@@ -7,7 +7,7 @@ export interface CreateGoalInput {
 
 export const goalService = {
     async createGoal(userId: string, input: CreateGoalInput): Promise<GoalData> {
-        return goalRepository.create({
+        return goalRepository.upsert({
             userId,
             ...input
         });

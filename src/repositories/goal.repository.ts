@@ -14,6 +14,21 @@ export const goalRepository = {
         return prisma.goal.create({ data });
     },
 
+    async upsert(data: { userId: string; type: string; content: string }): Promise<GoalData> {
+        return prisma.goal.upsert({
+            where: {
+                userId_type: {
+                    userId: data.userId,
+                    type: data.type,
+                },
+            },
+            update: {
+                content: data.content,
+            },
+            create: data,
+        });
+    },
+
     async findByUserId(userId: string): Promise<GoalData[]> {
         return prisma.goal.findMany({
             where: { userId },
