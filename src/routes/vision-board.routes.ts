@@ -29,6 +29,14 @@ router.use(requireAuth());
 
 const createBoardSchema = z.object({
     name: z.string().min(1).max(100),
+    sections: z.any().optional(),
+    selectedGoalIds: z.array(z.string()).optional(),
+});
+
+const updateBoardSchema = z.object({
+    name: z.string().min(1).max(100).optional(),
+    sections: z.any().optional(),
+    selectedGoalIds: z.array(z.string()).optional(),
 });
 
 // POST /api/v1/vision-board/boards — Create a new board
@@ -40,7 +48,7 @@ router.post(
             throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
         }
 
-        const { name } = parseResult.data;
+        const { name, sections, selectedGoalIds } = parseResult.data;
         const userId = req.user!.userId;
 
         const nameExists = await visionBoardRepository.boardNameExists(userId, name);
@@ -48,8 +56,30 @@ router.post(
             throw new ValidationError(`A board named "${name}" already exists.`);
         }
 
-        const board = await visionBoardRepository.createBoard(userId, name);
+        const board = await visionBoardRepository.createBoard(userId, name, sections, selectedGoalIds);
         res.status(201).json(board);
+    })
+);
+
+// PATCH /api/v1/vision-board/boards/:boardId — Update a board's name or metadata
+router.patch(
+    '/boards/:boardId',
+    asyncHandler(async (req: Request, res: Response) => {
+        const boardId = req.params['boardId'] as string;
+        const userId = req.user!.userId;
+
+        const parseResult = updateBoardSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const board = await visionBoardRepository.findBoardByIdAndUser(boardId, userId);
+        if (!board) {
+            throw new NotFoundError('Board not found');
+        }
+
+        const updatedBoard = await visionBoardRepository.updateBoard(boardId, userId, parseResult.data);
+        res.status(200).json(updatedBoard);
     })
 );
 

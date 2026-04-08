@@ -3,10 +3,22 @@ import { prisma } from '../lib/prisma';
 export const visionBoardRepository = {
     // ── Boards ──────────────────────────────────────────────────────────
 
-    async createBoard(userId: string, name: string) {
+    async createBoard(userId: string, name: string, sections?: any, selectedGoalIds?: string[]) {
         return prisma.visionBoard.create({
-            data: { userId, name },
+            data: { 
+                userId, 
+                name,
+                sections: sections || undefined,
+                selectedGoalIds: selectedGoalIds || []
+            },
             include: { images: true },
+        });
+    },
+
+    async updateBoard(id: string, userId: string, data: { name?: string; sections?: any; selectedGoalIds?: string[] }) {
+        return prisma.visionBoard.update({
+            where: { id },
+            data,
         });
     },
 

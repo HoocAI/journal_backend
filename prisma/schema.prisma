@@ -71,9 +71,11 @@ model JournalEntry {
   id        String   @id @default(uuid())
   userId    String
   content   String
-  photoUrl  String?
-  audioUrl  String?
-  entryDate DateTime
+  photoUrl    String?
+  photoS3Key  String?
+  audioUrl    String?
+  audioS3Key  String?
+  entryDate   DateTime
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
   user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
@@ -149,6 +151,7 @@ model AdminAudio {
   id        String   @id @default(uuid())
   title     String
   audioUrl  String
+  s3Key     String?
   createdAt DateTime @default(now())
 }
 
@@ -173,9 +176,11 @@ model VisionBoard {
   userId    String
   name      String
   createdAt DateTime           @default(now())
-  updatedAt DateTime           @updatedAt
-  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  images    VisionBoardImage[]
+  updatedAt       DateTime           @updatedAt
+  sections        Json?
+  selectedGoalIds String[]           @default([])
+  user            User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  images          VisionBoardImage[]
 
   @@unique([userId, name])
   @@index([userId])

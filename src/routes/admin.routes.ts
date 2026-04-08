@@ -7,8 +7,9 @@ import { ValidationError, UploadError } from '../utils/errors';
 import { questionService } from '../services/question';
 import { userManagementService } from '../services/admin/user-management.service';
 import { adminAudioService } from '../services/admin/admin-audio.service';
-import { adminAudioUpload, ALLOWED_AUDIO_TYPES } from '../utils/upload';
+import { adminAudioUpload, ALLOWED_AUDIO_TYPES, generateFilename } from '../utils/upload';
 import { getFirebaseStatus } from '../config/firebase.config';
+import { uploadFileToS3 } from '../utils/s3';
 import { prisma } from '../lib/prisma';
 
 const router = Router();
@@ -171,10 +172,16 @@ router.post(
             throw UploadError.invalidFileType(ALLOWED_AUDIO_TYPES);
         }
 
-        const audioUrl = `/uploads/admin/audio/${req.file.filename}`;
+        const file = req.file;
+        const filename = generateFilename(undefined, file.originalname);
+        const s3Key = `admin/audio/${filename}`;
+        
+        const audioUrl = await uploadFileToS3(file.buffer, s3Key, file.mimetype);
+
         const audio = await adminAudioService.createAudio({
             title: parseResult.data.title,
             audioUrl,
+            s3Key
         });
 
         res.status(201).json(audio);

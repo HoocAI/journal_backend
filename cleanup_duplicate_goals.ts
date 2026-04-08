@@ -2,56 +2,40 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-async function cleanupDuplicateGoals() {
-    console.log('Finding duplicate goals (same userId + type)...');
-
-    // Find all goals grouped by userId and type
+async function cleanupDuplicates() {
+    console.log('Starting goal cleanup...');
+    
+    // Find all goals
     const allGoals = await prisma.goal.findMany({
-        orderBy: { updatedAt: 'desc' },
+        orderBy: { createdAt: 'desc' }
     });
 
-    // Group by userId + type
-    const groups = new Map<string, typeof allGoals>();
+    const seen = new Set<string>();
+    const toDelete: string[] = [];
+
     for (const goal of allGoals) {
-        const key = `${goal.userId}__${goal.type}`;
-        if (!groups.has(key)) {
-            groups.set(key, []);
+        const key = `${goal.userId}_${goal.type}`;
+        if (seen.has(key)) {
+            // This is a duplicate (older, because we ordered by createdAt desc)
+            toDelete.push(goal.id);
+        } else {
+            seen.add(key);
         }
-        groups.get(key)!.push(goal);
     }
 
-    let deletedCount = 0;
-
-    for (const [key, goals] of groups) {
-        if (goals.length > 1) {
-            // Keep the first one (most recently updated), delete the rest
-            const [keep, ...duplicates] = goals;
-            console.log(`\nGroup: ${key}`);
-            console.log(`  Keeping: id=${keep.id}, content="${keep.content.substring(0, 50)}...", updatedAt=${keep.updatedAt}`);
-
-            for (const dup of duplicates) {
-                console.log(`  Deleting: id=${dup.id}, content="${dup.content.substring(0, 50)}...", updatedAt=${dup.updatedAt}`);
-                
-                // Check if this goal has any AssessmentResults linked to it
-                const assessmentCount = await prisma.assessmentResult.count({ where: { goalId: dup.id } });
-                if (assessmentCount > 0) {
-                    // Reassign assessments to the kept goal
-                    console.log(`    -> Reassigning ${assessmentCount} assessment results to kept goal`);
-                    await prisma.assessmentResult.updateMany({
-                        where: { goalId: dup.id },
-                        data: { goalId: keep.id },
-                    });
-                }
-
-                await prisma.goal.delete({ where: { id: dup.id } });
-                deletedCount++;
+    if (toDelete.length > 0) {
+        console.log(`Found ${toDelete.length} duplicate goals to delete.`);
+        const result = await prisma.goal.deleteMany({
+            where: {
+                id: { in: toDelete }
             }
-        }
+        });
+        console.log(`Successfully deleted ${result.count} duplicates.`);
+    } else {
+        console.log('No duplicate goals found.');
     }
 
-    console.log(`\nDone! Deleted ${deletedCount} duplicate goals.`);
+    await prisma.$disconnect();
 }
 
-cleanupDuplicateGoals()
-    .catch(console.error)
-    .finally(() => prisma.$disconnect());
+cleanupDuplicates().catch(console.error);

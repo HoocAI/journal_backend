@@ -48,24 +48,10 @@ function createFileFilter(allowedMimeTypes: string[]) {
     };
 }
 
-export function createUploadConfig(config: UploadConfig): multer.Multer {
-    const { destination, maxFileSize, allowedMimeTypes } = config;
+export function createUploadConfig(config: Omit<UploadConfig, 'destination'>): multer.Multer {
+    const { maxFileSize, allowedMimeTypes } = config;
 
-    const absoluteDestination = path.resolve(process.cwd(), destination);
-    if (!fs.existsSync(absoluteDestination)) {
-        fs.mkdirSync(absoluteDestination, { recursive: true });
-    }
-
-    const storage: StorageEngine = multer.diskStorage({
-        destination: (_req, _file, cb) => {
-            cb(null, absoluteDestination);
-        },
-        filename: (req: Request, file, cb) => {
-            const userId = (req as Request & { user?: { userId: string } }).user?.userId;
-            const filename = generateFilename(userId, file.originalname);
-            cb(null, filename);
-        },
-    });
+    const storage: StorageEngine = multer.memoryStorage();
 
     return multer({
         storage,
@@ -78,19 +64,16 @@ export function createUploadConfig(config: UploadConfig): multer.Multer {
 
 // Pre-configured upload handlers
 export const journalPhotoUpload = createUploadConfig({
-    destination: 'uploads/journal/photo',
     maxFileSize: 5 * 1024 * 1024, // 5MB
     allowedMimeTypes: ALLOWED_IMAGE_TYPES,
 });
 
 export const journalAudioUpload = createUploadConfig({
-    destination: 'uploads/journal/audio',
     maxFileSize: 10 * 1024 * 1024, // 10MB
     allowedMimeTypes: ALLOWED_AUDIO_TYPES,
 });
 
 export const adminAudioUpload = createUploadConfig({
-    destination: 'uploads/admin/audio',
     maxFileSize: 10 * 1024 * 1024, // 10MB
     allowedMimeTypes: ALLOWED_AUDIO_TYPES,
 });
@@ -99,33 +82,7 @@ export const adminAudioUpload = createUploadConfig({
 // multer middleware for journal entries that accepts both photo and audio uploads.
 
 export function createJournalUpload(): ReturnType<typeof multer> {
-    const photoDestination = path.resolve(process.cwd(), 'uploads/journal/photo');
-    const audioDestination = path.resolve(process.cwd(), 'uploads/journal/audio');
-
-    // Ensure directories exist
-    if (!fs.existsSync(photoDestination)) {
-        fs.mkdirSync(photoDestination, { recursive: true });
-    }
-    if (!fs.existsSync(audioDestination)) {
-        fs.mkdirSync(audioDestination, { recursive: true });
-    }
-
-    const storage: StorageEngine = multer.diskStorage({
-        destination: (_req, file, cb) => {
-            if (ALLOWED_IMAGE_TYPES.includes(file.mimetype)) {
-                cb(null, photoDestination);
-            } else if (ALLOWED_AUDIO_TYPES.includes(file.mimetype)) {
-                cb(null, audioDestination);
-            } else {
-                cb(new Error('Invalid file type'), '');
-            }
-        },
-        filename: (req: Request, file, cb) => {
-            const userId = (req as Request & { user?: { userId: string } }).user?.userId;
-            const filename = generateFilename(userId, file.originalname);
-            cb(null, filename);
-        },
-    });
+    const storage: StorageEngine = multer.memoryStorage();
 
     const fileFilter = (
         _req: Request,
