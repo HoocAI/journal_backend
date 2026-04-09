@@ -111,8 +111,8 @@ model Goal {
   user        User               @relation(fields: [userId], references: [id], onDelete: Cascade)
   AssessmentResult AssessmentResult[]
 
-  @@unique([userId, type])
   @@index([userId])
+  @@index([userId, type])
 }
 
 model QuestionSet {
