@@ -37,6 +37,7 @@ app.use('/api/v1/vision-board', visionBoardRouter);
 app.use('/api/v1/quotes', quoteRouter);
 app.use('/api/v1/affirmations', affirmationRouter);
 app.use('/api/v1/assessments', assessmentRouter);
+app.use('/api/v1/daily-photo', dailyPhotoRouter);
 
 // Global error handler
 app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {

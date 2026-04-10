@@ -44,6 +44,7 @@ model User {
   answers             QuestionAnswer[]
   sessions            Session[]
   visionBoards        VisionBoard[]
+  dailyPhotos         DailyPhoto[]
 }
 
 model Session {
@@ -212,6 +213,19 @@ model AssessmentResult {
 
   @@index([userId])
   @@index([goalId])
+}
+
+model DailyPhoto {
+  id        String   @id @default(uuid())
+  userId    String
+  url       String
+  s3Key     String
+  date      DateTime
+  createdAt DateTime @default(now())
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, date])
+  @@index([userId])
 }
 
 model BreathingPattern {
