@@ -4,7 +4,7 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
-import { authRouter, journalRouter, moodRouter, questionRouter, adminRouter, audioRouter, goalRouter, userRouter, visionBoardRouter, quoteRouter, affirmationRouter, assessmentRouter } from './routes';
+import { authRouter, journalRouter, moodRouter, questionRouter, adminRouter, audioRouter, goalRouter, userRouter, visionBoardRouter, quoteRouter, affirmationRouter, assessmentRouter, dailyPhotoRouter } from './routes';
 import { AppError } from './utils/errors';
 
 dotenv.config();
