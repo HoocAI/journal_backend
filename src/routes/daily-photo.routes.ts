@@ -3,7 +3,7 @@ import { dailyPhotoService } from '../services/daily-photo';
 import { requireAuth } from '../middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 import { journalPhotoUpload, generateFilename } from '../utils/upload';
-import { uploadFileToS3 } from '../utils/s3';
+import { uploadFileToS3, getSignedUrl } from '../utils/s3';
 import { ValidationError } from '../utils/errors';
 
 const router = Router();
@@ -22,16 +22,18 @@ router.post(
         const userId = req.user!.userId;
         const file = req.file;
         const filename = generateFilename(userId, file.originalname);
-        const s3Key = `daily-photo/${userId}/${filename}`;
+        const folder = process.env.AWS_UPLOAD_FOLDER || 'manifest';
+        const s3Key = `${folder}/daily-photo/${userId}/${filename}`;
         
-        const url = await uploadFileToS3(file.buffer, s3Key, file.mimetype);
+        await uploadFileToS3(file.buffer, s3Key, file.mimetype);
 
         const dailyPhoto = await dailyPhotoService.uploadPhoto(userId, {
-            url,
+            url: `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`,
             s3Key,
         });
 
-        res.status(201).json(dailyPhoto);
+        const signedUrl = await getSignedUrl(s3Key);
+        res.status(201).json({ ...dailyPhoto, url: signedUrl });
     })
 );
 
@@ -41,7 +43,13 @@ router.get(
     asyncHandler(async (req: Request, res: Response) => {
         const userId = req.user!.userId;
         const photo = await dailyPhotoService.getTodayPhoto(userId);
-        res.status(200).json(photo);
+        
+        if (photo && photo.s3Key) {
+            const signedUrl = await getSignedUrl(photo.s3Key);
+            res.status(200).json({ ...photo, url: signedUrl });
+        } else {
+            res.status(200).json(photo);
+        }
     })
 );
 
@@ -51,7 +59,15 @@ router.get(
     asyncHandler(async (req: Request, res: Response) => {
         const userId = req.user!.userId;
         const history = await dailyPhotoService.getHistory(userId);
-        res.status(200).json(history);
+        
+        const historyWithSignedUrls = await Promise.all(
+            history.map(async (photo) => ({
+                ...photo,
+                url: photo.s3Key ? await getSignedUrl(photo.s3Key) : photo.url,
+            }))
+        );
+        
+        res.status(200).json(historyWithSignedUrls);
     })
 );
 
