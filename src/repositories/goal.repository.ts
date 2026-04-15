@@ -9,6 +9,7 @@ export interface GoalData {
     isAutomated: boolean;
     targetValue?: string | null;
     templateKey?: string | null;
+    affirmation?: string | null;
     createdAt: Date;
     updatedAt: Date;
 }
@@ -21,6 +22,7 @@ export interface CreateGoalInput {
     isAutomated?: boolean;
     targetValue?: string;
     templateKey?: string;
+    affirmation?: string;
 }
 
 export const goalRepository = {
@@ -69,10 +71,10 @@ export const goalRepository = {
         });
     },
 
-    async update(id: string, content: string): Promise<GoalData> {
+    async update(id: string, content: string, affirmation?: string): Promise<GoalData> {
         return prisma.goal.update({
             where: { id },
-            data: { content },
+            data: { content, affirmation },
         });
     },
 
