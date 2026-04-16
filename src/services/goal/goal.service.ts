@@ -44,7 +44,10 @@ export const goalService = {
     },
 
     async getUserGoals(userId: string): Promise<GoalData[]> {
-        return goalRepository.findByUserId(userId);
+        console.log(`[GoalService] Finding goals in repo for user: ${userId}`);
+        const result = await goalRepository.findByUserId(userId);
+        console.log(`[GoalService] Repo returned ${result.length} goals.`);
+        return result;
     },
 
     async getAllGoals(): Promise<GoalData[]> {
@@ -56,9 +59,9 @@ export const goalService = {
         // Note: Repository update currently only updates content. We need to update it to support affirmation.
         const existingGoals = await goalRepository.findAll(); // This is inefficient but keep it simple for now
         const goal = existingGoals.find(g => g.id === id);
-        
+
         const affirmation = await openaiService.generateGoalAffirmation(content, goal?.deadline || undefined);
-        
+
         return goalRepository.update(id, content, affirmation);
     },
 

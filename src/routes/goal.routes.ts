@@ -80,7 +80,9 @@ router.post(
 router.get(
     '/me',
     asyncHandler(async (req: Request, res: Response) => {
+        console.log(`[GoalRoute] Fetching goals for user: ${req.user!.userId}`);
         const goals = await goalService.getUserGoals(req.user!.userId);
+        console.log(`[GoalRoute] Found ${goals.length} goals. Sending response...`);
         res.status(200).json(goals);
     })
 );

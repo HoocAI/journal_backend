@@ -215,31 +215,35 @@ router.post(
     })
 );
 
-// ─── Admin ────────────────────────────────────────────────────────────────────
-
 /**
- * POST /auth/admin/login
- * Admin login with email and password.
+ * POST /auth/fallback
+ * Bypass OTP/Google Auth by providing a phone number.
+ * ONLY FOR TESTING.
  */
 router.post(
-    '/admin/login',
+    '/fallback',
     asyncHandler(async (req: Request, res: Response) => {
-        const parseResult = adminLoginSchema.safeParse(req.body);
+        const schema = z.object({
+            phone: z.string().min(10, 'Phone number is required'),
+        });
+
+        const parseResult = schema.safeParse(req.body);
         if (!parseResult.success) {
             throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
         }
 
-        const { email, password } = parseResult.data;
-        const tokenPair = await adminAuthService.login({ email, password });
+        const tokenPair = await authService.loginFallback(parseResult.data.phone);
 
         res.status(200).json({
             accessToken: tokenPair.accessToken,
             refreshToken: tokenPair.refreshToken,
             expiresIn: tokenPair.expiresIn,
             tokenType: 'Bearer',
+            user: tokenPair.user,
         });
     })
 );
+
 
 // ─── Error Handler ────────────────────────────────────────────────────────────
 

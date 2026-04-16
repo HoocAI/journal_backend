@@ -13,6 +13,10 @@ const app = express();
 
 // Middleware
 app.use(cors());
+app.use((req, res, next) => {
+    console.log(`[${new Date().toISOString()}] ${req.method} ${req.url}`);
+    next();
+});
 app.use(express.json());
 app.use(cookieParser());
 
@@ -40,8 +44,20 @@ app.use('/api/v1/assessments', assessmentRouter);
 app.use('/api/v1/daily-photo', dailyPhotoRouter);
 
 // Global error handler
-app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
+app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
     const requestId = req.headers['x-request-id'] ?? crypto.randomUUID();
+
+    // Handle JSON parsing errors (from body-parser)
+    if (err instanceof SyntaxError && 'status' in err && err.status === 400 && 'body' in err) {
+        return res.status(400).json({
+            error: {
+                code: 'BAD_REQUEST',
+                message: 'Invalid JSON payload received',
+            },
+            requestId,
+            timestamp: new Date().toISOString(),
+        });
+    }
 
     if (err instanceof AppError) {
         res.status(err.statusCode).json({
@@ -52,15 +68,21 @@ app.use((err: Error, req: Request, res: Response, _next: NextFunction) => {
         return;
     }
 
-    console.error('Unexpected error:', err);
-    res.status(500).json({
+    console.error(`[${requestId}] Unexpected error at ${req.method} ${req.url}:`, err);
+    
+    // Use error status if available (e.g. from other middlewares)
+    const statusCode = err.status || err.statusCode || 500;
+    
+    return res.status(statusCode).json({
         error: {
-            code: 'INTERNAL_ERROR',
-            message: 'An unexpected error occurred',
+            code: statusCode === 400 ? 'BAD_REQUEST' : 'INTERNAL_ERROR',
+            message: statusCode === 500 ? 'An unexpected error occurred' : err.message,
         },
         requestId,
         timestamp: new Date().toISOString(),
     });
+
 });
+
 
 export default app;

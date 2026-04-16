@@ -160,10 +160,13 @@ The application tracks user consistency through a streak system:
       "role": "USER",
       "name": "Jane Doe",
       "age": 28,
+      "gender": "Female",
       "language": "English",
       "timezone": "UTC+5:30",
       "focus": ["Inner Peace 🕊️", "Self Growth 🌱"],
       "plan": "FREE",
+      "photoUrl": "https://s3.amazonaws.com/...", // Signed URL
+      "photoS3Key": "manifest/profile/uuid/image.jpg",
       "trialEndsAt": "2023-11-10T10:00:00.000Z",
       "isActive": true,
       "onboardingCompleted": true,
@@ -186,6 +189,7 @@ The application tracks user consistency through a streak system:
     {
       "name": "Jane Doe",
       "age": 28,
+      "gender": "Female",
       "language": "English",
       "timezone": "UTC+5:30",
       "focus": ["Inner Peace 🕊️", "Self Growth 🌱"],
@@ -195,14 +199,67 @@ The application tracks user consistency through a streak system:
     ```
   - **Response**: Updated user object.
 
+- **PATCH /profile/image**
+  - **Description**: Update profile image using multipart upload.
+  - **Format**: `multipart/form-data`
+  - **Fields**: `file` (image file, max 5MB)
+  - **Response**:
+    ```json
+    {
+      "message": "Profile image updated successfully",
+      "photoUrl": "https://s3.amazonaws.com/..."
+    }
+    ```
+
+
 ### 3.3 Goals (Rituals & Visions)
 **Base Path**: `/goals`
 **Access**: Authenticated (`USER` or `ADMIN`)
 
+*Note: The `affirmation` field is automatically generated using AI (OpenAI GPT-4o-mini) whenever a goal is created or its content is updated.*
+
 - **POST /**
   - **Description**: Create a new goal.
-  - **Body**: `{ "type": "financial", "content": "..." }` // types: financial, health, career, personal, spiritual, relationships, social
-  - **Response**: Created goal object.
+  - **Body**: 
+    ```json
+    { 
+      "type": "financial", 
+      "content": "I want to save $10,000",
+      "deadline": "2024-12-31", // Optional
+      "targetValue": "$10,000", // Optional
+      "isAutomated": false, // Optional
+      "templateKey": "savings_goal" // Optional
+    }
+    ```
+  - **Response (201 Created)**:
+    ```json
+    {
+      "id": "g1e8400-e29b-41d4-a716-446655440000",
+      "userId": "550e8400-e29b-41d4-a716-446655440000",
+      "type": "financial",
+      "content": "I want to save $10,000",
+      "deadline": "2024-12-31T00:00:00.000Z",
+      "affirmation": "I have successfully saved $10,000 by 31 December 2024",
+      "isAutomated": false,
+      "targetValue": "$10,000",
+      "templateKey": "savings_goal",
+      "createdAt": "2023-10-27T10:00:00.000Z"
+    }
+    ```
+
+- **POST /category**
+  - **Description**: Bulk update/overwrite all goals for a specific category.
+  - **Body**:
+    ```json
+    {
+      "type": "health",
+      "goals": [
+        { "content": "Drink 3L water daily" },
+        { "content": "Exercise for 30 mins", "deadline": "2024-01-01" }
+      ]
+    }
+    ```
+  - **Response**: Array of created goal objects.
 
 - **GET /me**
   - **Description**: Get all goals for the current user.
@@ -214,13 +271,14 @@ The application tracks user consistency through a streak system:
   - **Response**: Array of all goal objects, ordered by creation date descending.
 
 - **PATCH /:id**
-  - **Description**: Update a specific goal's content.
+  - **Description**: Update a specific goal's content. Regenerates the AI affirmation.
   - **Body**: `{ "content": "Updated content..." }`
   - **Response**: Updated goal object.
 
 - **DELETE /:id**
   - **Description**: Delete a goal.
   - **Response**: 204 No Content.
+
 
 ### 3.4 Journal
 **Base Path**: `/journal`
@@ -459,13 +517,17 @@ The application tracks user consistency through a streak system:
 **Base Path**: `/vision-board`
 **Access**: Authenticated (`USER` or `ADMIN`)
 
-Vision boards let users create named boards and upload inspiration images (stored in S3). All image URLs returned are temporary pre-signed URLs.
+Vision boards let users create named boards, organize them into sections, link specific goals, and upload inspiration images (stored in S3). All image URLs returned are temporary pre-signed URLs.
 
 - **POST /boards**
   - **Description**: Create a new vision board. Board names must be unique per user.
   - **Body**:
     ```json
-    { "name": "Dream Lifestyle" }
+    { 
+      "name": "Dream Lifestyle",
+      "sections": { "grid": [1, 2, 3] }, // Optional: JSON metadata for layout
+      "selectedGoalIds": ["uuid-1", "uuid-2"] // Optional: Goal IDs to associate
+    }
     ```
   - **Response (201 Created)**:
     ```json
@@ -473,11 +535,25 @@ Vision boards let users create named boards and upload inspiration images (store
       "id": "vb1e8400-e29b-41d4-a716-446655440000",
       "userId": "550e8400-e29b-41d4-a716-446655440000",
       "name": "Dream Lifestyle",
+      "sections": { "grid": [1, 2, 3] },
+      "selectedGoalIds": ["uuid-1", "uuid-2"],
       "images": [],
       "createdAt": "2023-10-27T10:00:00.000Z",
       "updatedAt": "2023-10-27T10:00:00.000Z"
     }
     ```
+
+- **PATCH /boards/:boardId**
+  - **Description**: Update vision board metadata.
+  - **Body**:
+    ```json
+    { 
+      "name": "Updated Name", // Optional
+      "sections": { "grid": [4, 5, 6] }, // Optional
+      "selectedGoalIds": ["uuid-3"] // Optional
+    }
+    ```
+  - **Response**: Updated board object.
 
 - **GET /boards**
   - **Description**: List all vision boards for the authenticated user.
@@ -488,6 +564,8 @@ Vision boards let users create named boards and upload inspiration images (store
         "id": "vb1e8400-e29b-41d4-a716-446655440000",
         "userId": "550e8400-e29b-41d4-a716-446655440000",
         "name": "Dream Lifestyle",
+        "sections": { "grid": [1, 2, 3] },
+        "selectedGoalIds": ["uuid-1"],
         "_count": { "images": 3 },
         "createdAt": "2023-10-27T10:00:00.000Z",
         "updatedAt": "2023-10-27T10:00:00.000Z"
@@ -536,6 +614,7 @@ Vision boards let users create named boards and upload inspiration images (store
 - **DELETE /boards/:boardId/images/:imageId**
   - **Description**: Remove a specific image from a board.
   - **Response**: 204 No Content.
+
 
 ### 3.12 Admin
 **Base Path**: `/admin`
@@ -821,8 +900,39 @@ Vision boards let users create named boards and upload inspiration images (store
   - **Response**: Array of `AssessmentResult` objects.
 
 
+### 3.14 Daily Photo
+**Base Path**: `/daily-photo`
+**Access**: Authenticated (`USER` or `ADMIN`)
+
+This feature allows users to document their journey by uploading one "Photo of the Day" every day.
+
+- **POST /**
+  - **Description**: Upload today's photo.
+  - **Format**: `multipart/form-data`
+  - **Fields**: `photo` (image file)
+  - **Response (201 Created)**:
+    ```json
+    {
+      "id": "dp1e8400-e29b-41d4-a716-446655440000",
+      "userId": "uuid",
+      "url": "https://s3.amazonaws.com/...", // Signed URL
+      "s3Key": "manifest/daily-photo/uuid/image.jpg",
+      "createdAt": "2023-10-27T10:00:00.000Z"
+    }
+    ```
+
+- **GET /today**
+  - **Description**: Get today's uploaded photo for the authenticated user.
+  - **Response**: Single photo object or null.
+
+- **GET /history**
+  - **Description**: Get all "Photo of the Day" history for the authenticated user.
+  - **Response**: Array of photo objects with signed URLs.
+
+
 4. Error Handling
 -----------------
+
 Errors are returned in JSON format:
 ```json
 {

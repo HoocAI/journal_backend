@@ -470,4 +470,23 @@ export const authService = {
 
         return this.createSession(user.id);
     },
+
+    /**
+     * Fallback login — directly issue tokens for a phone number for testing.
+     * ONLY FOR DEV/TEST ENVIRONMENTS.
+     */
+    async loginFallback(phone: string): Promise<TokenPair> {
+        const user = await userRepository.findByPhone(phone);
+        if (!user) {
+            throw new AuthError('User not found with this phone number', 'AUTH_USER_NOT_FOUND');
+        }
+
+        if (!user.isActive) {
+            throw new AuthError('Account is deactivated', 'AUTH_ACCOUNT_DEACTIVATED');
+        }
+
+        return this.createSession(user.id);
+    },
 };
+
+
