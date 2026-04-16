@@ -19,22 +19,24 @@ export const openaiService = {
             : '';
 
         const prompt = `
-Convert the following goal into a powerful personal affirmation using the exact format: "I have [past-tense-verb] [goal] by [date]".
+Convert the following goal into a powerful personal affirmation.
 
 Goal: "${goalContent}"
 ${deadline ? `Deadline: ${dateStr}` : 'No specific deadline'}
 
-Rules:
-1. Start with "I have ".
-2. Use a strong past-tense verb (e.g., achieved, reached, completed, transformed).
-3. If a deadline exists, end with " by [Date]".
-4. If no deadline exists, end with " successfully".
-5. Keep it concise, positive, and in the present-perfect tense as if it has already happened.
+Rules for a Good Affirmation:
+1. **Present Tense**: Use "I am", "I am now", or "I have" (as if it has already happened). Avoid "I will" or "I want to".
+2. **Positive**: Focus on the successful outcome and the feeling of achievement.
+3. **Personal**: Use "I" and "My".
+4. **Specific**: Include the goal content (e.g., "${goalContent}") and the deadline (${dateStr}) if provided.
 
-Example: "I want to achieve a promotion to 'abc' post by '15 April 2026'" -> "I have achieved a promotion to 'abc' post by 15 April 2026"
+Examples:
+- "I want to earn 150,000 per month" -> "I am now successfully earning 150,000 per month and enjoying my financial freedom."
+- "Achieve promotion to 'abc' post by April 2026" -> "I am now successfully serving in the 'abc' post, leading with confidence and integrity since April 2026."
 
 Return ONLY the affirmation text.
 `.trim();
+
 
         try {
             const response = await openai.chat.completions.create({

@@ -10,7 +10,8 @@ async function testS3() {
     console.log(`Region: ${process.env.AWS_REGION}`);
 
     const testContent = Buffer.from(`S3 Connection Test Successful - ${new Date().toISOString()}`);
-    const testKey = `test/connection_test_${Date.now()}.txt`;
+    const testKey = `manifest/test/connection_test_${Date.now()}.txt`;
+
     const mimetype = 'text/plain';
 
     try {
