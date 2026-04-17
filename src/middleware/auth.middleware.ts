@@ -56,16 +56,18 @@ export function requirePremium() {
 
             const user = await prisma.user.findUnique({
                 where: { id: req.user.userId },
-                select: { plan: true, trialEndsAt: true },
+                select: { plan: true, trialEndsAt: true, premiumEndsAt: true },
             });
 
             if (!user) {
                 throw AuthError.tokenInvalid();
             }
 
+            const now = new Date();
             const isPremiumActive =
                 user.plan === 'PREMIUM' ||
-                (user.plan === 'TRIAL' && user.trialEndsAt && user.trialEndsAt > new Date());
+                (user.plan === 'TRIAL' && user.trialEndsAt && user.trialEndsAt > now) ||
+                (user.premiumEndsAt && user.premiumEndsAt > now);
 
             if (!isPremiumActive) {
                 throw ForbiddenError.premiumRequired();

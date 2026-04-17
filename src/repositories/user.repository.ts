@@ -9,6 +9,7 @@ export interface UserData {
     role: Role;
     plan: Plan;
     trialEndsAt: Date | null;
+    premiumEndsAt: Date | null;
     isActive: boolean;
     onboardingCompleted: boolean;
     goalsSet: boolean;
@@ -156,6 +157,11 @@ export const userRepository = {
         // Trial plan has access if trial hasn't expired
         if (user.plan === 'TRIAL' && user.trialEndsAt) {
             return user.trialEndsAt > new Date();
+        }
+
+        // Check monthwise premium expiry
+        if (user.premiumEndsAt) {
+            return user.premiumEndsAt > new Date();
         }
 
         return false;

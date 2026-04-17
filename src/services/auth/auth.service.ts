@@ -14,6 +14,7 @@ import { userRepository } from '../../repositories/user.repository';
 import { AuthError, ConflictError } from '../../utils/errors';
 import { prisma } from '../../lib/prisma';
 import { OAuth2Client } from 'google-auth-library';
+import { firebaseAdmin } from '../../config/firebase.config';
 import type { TokenPair, LoginCredentials, PremiumStatus, TrialInfo } from '../../types';
 
 const SALT_ROUNDS = 10;
@@ -469,6 +470,92 @@ export const authService = {
         }
 
         return this.createSession(user.id);
+    },
+
+    /**
+     * Firebase Phone Login
+     * Verifies the Firebase ID token, creates the user if new (with placeholder email),
+     * and returns a full TokenPair.
+     */
+    async firebasePhoneLogin(idToken: string): Promise<TokenPair> {
+        console.log('[AuthService] Initiating Firebase Phone Login');
+
+        let decodedToken;
+        try {
+            decodedToken = await firebaseAdmin.auth().verifyIdToken(idToken);
+            console.log(`[AuthService] Firebase token verified for phone: ${decodedToken.phone_number}`);
+        } catch (err: any) {
+            console.error('[AuthService] Firebase verification failed:', err.message);
+            throw new AuthError('Invalid Firebase token', 'AUTH_INVALID_TOKEN');
+        }
+
+        const phone = decodedToken.phone_number;
+        if (!phone) {
+            throw new AuthError('Firebase token missing phone number', 'AUTH_INVALID_TOKEN');
+        }
+
+        // Try finding by phone number
+        let user = await userRepository.findByPhone(phone);
+
+        if (!user) {
+            console.warn(`[AuthService] Login failed: Phone ${phone} not registered.`);
+            throw new AuthError('Account not found. Please sign up via Google first.', 'AUTH_USER_NOT_FOUND', 404);
+        }
+
+        if (!user.isActive) {
+            console.warn(`[AuthService] Deactivated user attempted login: ${phone}`);
+            throw new AuthError('Account is deactivated', 'AUTH_ACCOUNT_DEACTIVATED');
+        }
+
+        // Ensure mark as verified if found but not marked (e.g., if manually entered but not verified)
+        if (!user.isPhoneVerified) {
+            console.log(`[AuthService] Mark existing user ${phone} as phone verified`);
+            user = await userRepository.update(user.id, { isPhoneVerified: true });
+        }
+
+        console.log(`[AuthService] User logged in by phone: ${user.email}`);
+        return this.createSession(user.id);
+    },
+
+    /**
+     * Firebase Phone Verification (Step 2 of Signup)
+     * Links a verified Firebase phone number to a user who started signup via Google.
+     */
+    async firebasePhoneVerify(userId: string, idToken: string): Promise<TokenPair> {
+        console.log(`[AuthService] Initiating Phone Verification for UID: ${userId}`);
+
+        let decodedToken;
+        try {
+            decodedToken = await firebaseAdmin.auth().verifyIdToken(idToken);
+        } catch (err: any) {
+            console.error('[AuthService] Firebase verification failed:', err.message);
+            throw new AuthError('Invalid Firebase token', 'AUTH_INVALID_TOKEN');
+        }
+
+        const phone = decodedToken.phone_number;
+        if (!phone) {
+            throw new AuthError('Firebase token missing phone number', 'AUTH_INVALID_TOKEN');
+        }
+
+        const user = await userRepository.findById(userId);
+        if (!user) {
+            throw new AuthError('User not found', 'AUTH_USER_NOT_FOUND');
+        }
+
+        // Check if phone is already used by ANOTHER user
+        const existingPhoneUser = await userRepository.findByPhone(phone);
+        if (existingPhoneUser && existingPhoneUser.id !== userId) {
+            throw new ConflictError('Phone number already in use by another account', 'AUTH_PHONE_IN_USE');
+        }
+
+        // Link phone and mark as verified
+        await userRepository.update(userId, {
+            phone,
+            isPhoneVerified: true,
+        });
+
+        console.log(`[AuthService] Phone ${phone} linked to UID: ${userId}`);
+        return this.createSession(userId);
     },
 
     /**

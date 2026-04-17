@@ -13,6 +13,10 @@ const googleLoginSchema = z.object({
     idToken: z.string().min(1, 'ID Token is required'),
 });
 
+const firebaseLoginSchema = z.object({
+    idToken: z.string().min(1, 'Firebase ID Token is required'),
+});
+
 const verifyPhoneSchema = z.object({
     phone: z.string().min(10, 'Phone number is required'),
     otp: z.string().length(6, 'OTP must be 6 digits'),
@@ -61,6 +65,61 @@ router.post(
         const result = await authService.googleLogin({ idToken: parseResult.data.idToken });
         const resolvedId = 'userId' in result ? result.userId : result.user?.id;
         console.log(`[${timestamp}] [AuthRoute] Success: Issue ${'provisionalToken' in result ? 'Provisional' : 'Full Access'} token for UID: ${resolvedId}`);
+
+        res.status(200).json(result);
+    })
+);
+
+// ─── Firebase Phone Login ───────────────────────────────────────────────────
+
+/**
+ * POST /auth/firebase/phone
+ * 
+ * Verifies the Firebase ID token (derived from Phone Auth on client).
+ * Creates or identifies user, returns full access token pair.
+ */
+router.post(
+    '/firebase/phone',
+    asyncHandler(async (req: Request, res: Response) => {
+        const timestamp = new Date().toISOString();
+        console.log(`[${timestamp}] [AuthRoute] Incoming Firebase Phone Login Request. IP: ${req.ip}`);
+        
+        const parseResult = firebaseLoginSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            console.warn(`[${timestamp}] [AuthRoute] Validation failed:`, parseResult.error.flatten().fieldErrors);
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const result = await authService.firebasePhoneLogin(parseResult.data.idToken);
+        
+        console.log(`[${timestamp}] [AuthRoute] Success: Issue Session for phone user UID: ${result.user?.id}`);
+
+        res.status(200).json(result);
+    })
+);
+
+/**
+ * POST /auth/firebase/verify-phone
+ * 
+ * Step 2 of Signup flow.
+ * Requires Authorization: Bearer <provisionalToken> from Google Step.
+ * Verifies Firebase token, links phone, and completes signup.
+ */
+router.post(
+    '/firebase/verify-phone',
+    requireProvisionalAuth(),
+    asyncHandler(async (req: Request, res: Response) => {
+        const timestamp = new Date().toISOString();
+        const userId = req.user!.userId;
+        console.log(`[${timestamp}] [AuthRoute] Incoming Firebase Phone Verification for UID: ${userId}`);
+
+        const parseResult = firebaseLoginSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const result = await authService.firebasePhoneVerify(userId, parseResult.data.idToken);
+        console.log(`[${timestamp}] [AuthRoute] Success: Signup completed for UID: ${userId}`);
 
         res.status(200).json(result);
     })

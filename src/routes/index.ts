@@ -11,4 +11,6 @@ export { quoteRouter } from './quote.routes';
 export { affirmationRouter } from './affirmation.routes';
 export { assessmentRouter } from './assessment.routes';
 export { dailyPhotoRouter } from './daily-photo.routes';
+export { default as paymentRouter } from './payment.routes';
+export { default as adminPaymentRouter } from './admin-payment.routes';
 

@@ -125,7 +125,7 @@ export function generateRefreshToken(payload: {
  */
 export function generateProvisionalToken(payload: { userId: string }): string {
     const options: SignOptions = {
-        expiresIn: 600, // 10 minutes
+        expiresIn: 3600, // 1 hour for dev/testing
         algorithm: 'HS256',
     };
 

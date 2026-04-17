@@ -127,6 +127,24 @@ export class ValidationError extends AppError {
 }
 
 /**
+ * Bad request error (400 Bad Request)
+ * Used for generic client-side errors that aren't specific to validation
+ */
+export class BadRequestError extends AppError {
+    readonly statusCode = 400;
+    readonly code: string;
+
+    constructor(
+        message: string = 'Bad request',
+        code: string = 'BAD_REQUEST',
+        details?: unknown
+    ) {
+        super(message, details);
+        this.code = code;
+    }
+}
+
+/**
  * Conflict error (409 Conflict)
  * Used when an operation conflicts with existing data
  */

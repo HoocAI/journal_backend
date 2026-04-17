@@ -4,7 +4,7 @@ import cookieParser from 'cookie-parser';
 import path from 'path';
 import dotenv from 'dotenv';
 import crypto from 'crypto';
-import { authRouter, journalRouter, moodRouter, questionRouter, adminRouter, audioRouter, goalRouter, userRouter, visionBoardRouter, quoteRouter, affirmationRouter, assessmentRouter, dailyPhotoRouter } from './routes';
+import { authRouter, journalRouter, moodRouter, questionRouter, adminRouter, audioRouter, goalRouter, userRouter, visionBoardRouter, quoteRouter, affirmationRouter, assessmentRouter, dailyPhotoRouter, paymentRouter, adminPaymentRouter } from './routes';
 import { AppError } from './utils/errors';
 
 dotenv.config();
@@ -42,6 +42,8 @@ app.use('/api/v1/quotes', quoteRouter);
 app.use('/api/v1/affirmations', affirmationRouter);
 app.use('/api/v1/assessments', assessmentRouter);
 app.use('/api/v1/daily-photo', dailyPhotoRouter);
+app.use('/api/v1/payments', paymentRouter);
+app.use('/api/v1/admin/payments', adminPaymentRouter);
 
 // Global error handler
 app.use((err: any, req: Request, res: Response, _next: NextFunction) => {
