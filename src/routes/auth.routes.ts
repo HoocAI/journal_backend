@@ -303,6 +303,52 @@ router.post(
     })
 );
 
+/**
+ * POST /auth/mock/send-otp
+ * Mock endpoint to request OTP.
+ * ONLY FOR TESTING.
+ */
+router.post(
+    '/mock/send-otp',
+    asyncHandler(async (req: Request, res: Response) => {
+        const schema = z.object({ phone: z.string().min(10, 'Phone number is required') });
+        const parseResult = schema.safeParse(req.body);
+        if (!parseResult.success) throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        
+        console.log(`[Mock] OTP requested for ${parseResult.data.phone}: 123456`);
+        res.status(200).json({ message: 'OTP sent successfully (Mock: use 123456)', success: true });
+    })
+);
+
+/**
+ * POST /auth/mock/verify-otp
+ * Mock endpoint to verify OTP. Auto-creates user if they don't exist.
+ * ONLY FOR TESTING.
+ */
+router.post(
+    '/mock/verify-otp',
+    asyncHandler(async (req: Request, res: Response) => {
+        const schema = z.object({
+            phone: z.string().min(10, 'Phone number is required'),
+            otp: z.string().length(6, 'OTP must be 6 digits')
+        });
+        const parseResult = schema.safeParse(req.body);
+        if (!parseResult.success) throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        
+        const { phone, otp } = parseResult.data;
+        if (otp !== '123456') throw new AuthError('Invalid OTP', 'AUTH_INVALID_OTP');
+        
+        const tokenPair = await authService.mockVerifyOtp(phone);
+        res.status(200).json({
+            accessToken: tokenPair.accessToken,
+            refreshToken: tokenPair.refreshToken,
+            expiresIn: tokenPair.expiresIn,
+            tokenType: 'Bearer',
+            user: tokenPair.user,
+        });
+    })
+);
+
 
 // ─── Error Handler ────────────────────────────────────────────────────────────
 

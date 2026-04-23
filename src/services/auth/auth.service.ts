@@ -559,6 +559,53 @@ export const authService = {
     },
 
     /**
+     * Mock OTP Verification
+     * Auto-creates user if not found. Only for testing.
+     */
+    async mockVerifyOtp(phone: string): Promise<TokenPair> {
+        let user = await userRepository.findByPhone(phone);
+
+        if (!user) {
+            const trialEndsAt = new Date();
+            trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DURATION_DAYS);
+
+            user = await prisma.$transaction(async (tx) => {
+                const newUser = await tx.user.create({
+                    data: {
+                        email: `mock_${Date.now()}@example.com`,
+                        phone,
+                        passwordHash: await bcrypt.hash(Math.random().toString(36), SALT_ROUNDS),
+                        role: 'USER',
+                        plan: 'TRIAL',
+                        trialEndsAt,
+                        isPhoneVerified: true,
+                    },
+                });
+
+                await tx.consent.create({
+                    data: {
+                        userId: newUser.id,
+                        termsAccepted: true,
+                        privacyAccepted: true,
+                        recordingAccepted: true,
+                    },
+                });
+
+                return newUser;
+            });
+            console.log(`[AuthService] Mock user created: ${phone}`);
+        } else if (!user.isPhoneVerified) {
+            user = await userRepository.update(user.id, { isPhoneVerified: true });
+        }
+
+        if (!user.isActive) {
+            throw new AuthError('Account is deactivated', 'AUTH_ACCOUNT_DEACTIVATED');
+        }
+
+        return this.createSession(user.id);
+    },
+
+    /**
      * Fallback login — directly issue tokens for a phone number for testing.
      * ONLY FOR DEV/TEST ENVIRONMENTS.
      */
