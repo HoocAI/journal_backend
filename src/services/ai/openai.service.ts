@@ -35,7 +35,7 @@ Examples:
 - "I am now successfully earning 150,000 per month and enjoying my financial freedom."
 - "I am now successfully serving in the 'abc' post, leading with confidence and integrity since April 2026."
 
-Return ONLY a valid JSON array containing exactly 5 string affirmations. Do not include markdown formatting like ```json.
+Return ONLY a valid JSON array containing exactly 5 string affirmations. Do not include markdown formatting like \`\`\`json.
 `.trim();
 
 
@@ -56,7 +56,7 @@ Return ONLY a valid JSON array containing exactly 5 string affirmations. Do not 
                 try {
                     const parsed = JSON.parse(content);
                     if (Array.isArray(parsed) && parsed.length > 0) {
-                        return JSON.stringify(parsed);
+                        return JSON.stringify(parsed.slice(0, 5)); // Ensure exactly 5 if AI overproduced
                     }
                 } catch (e) {
                     console.warn("AI returned malformed JSON, returning raw string.");
@@ -69,7 +69,6 @@ Return ONLY a valid JSON array containing exactly 5 string affirmations. Do not 
             return JSON.stringify(Array(5).fill(fallback));
         } catch (error) {
             console.error('Error generating affirmation with OpenAI:', error);
-            // Fallback to a simple manual format if AI fails
             const fallback = deadline 
                 ? `I have achieved ${goalContent} by ${dateStr}`
                 : `I have successfully achieved ${goalContent}`;
