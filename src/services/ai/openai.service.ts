@@ -31,10 +31,6 @@ Rules for Good Affirmations:
 4. **Personal**: Use "I" and "My".
 5. **Specific**: Include the goal content (e.g., "${goalContent}") and the deadline (${dateStr}) if provided.
 
-Examples:
-- "I am now successfully earning 150,000 per month and enjoying my financial freedom."
-- "I am now successfully serving in the 'abc' post, leading with confidence and integrity since April 2026."
-
 Return ONLY a valid JSON array containing exactly 5 string affirmations. Do not include markdown formatting like \`\`\`json.
 `.trim();
 
@@ -43,7 +39,7 @@ Return ONLY a valid JSON array containing exactly 5 string affirmations. Do not 
             const response = await openai.chat.completions.create({
                 model: "gpt-4o-mini",
                 messages: [
-                    { role: "system", content: "You are a professional mindset and wellness coach specializing in affirmations. You always return responses in valid JSON format." },
+                    { role: "system", content: "You are a professional mindset and wellness coach. You MUST return exactly 5 affirmations in a strict JSON array format. No prose, no conversation, just the array." },
                     { role: "user", content: prompt }
                 ],
                 temperature: 0.7,
@@ -52,17 +48,31 @@ Return ONLY a valid JSON array containing exactly 5 string affirmations. Do not 
 
             const content = response.choices[0]?.message?.content?.trim();
             if (content) {
-                // Verify it's a valid JSON array
+                // Remove markdown code blocks if AI ignored instructions
+                const cleanContent = content.replace(/^```json\n?/, '').replace(/\n?```$/, '').trim();
+                
                 try {
-                    const parsed = JSON.parse(content);
-                    if (Array.isArray(parsed) && parsed.length > 0) {
-                        return JSON.stringify(parsed.slice(0, 5)); // Ensure exactly 5 if AI overproduced
+                    const parsed = JSON.parse(cleanContent);
+                    if (Array.isArray(parsed)) {
+                        // Strictly return 5 items
+                        const result = parsed.slice(0, 5);
+                        while (result.length < 5) {
+                            result.push(result[result.length - 1] || "I am achieving my goals.");
+                        }
+                        return JSON.stringify(result);
                     }
                 } catch (e) {
-                    console.warn("AI returned malformed JSON, returning raw string.");
+                    // If JSON fails, try to extract lines that look like affirmations
+                    const lines = cleanContent.split('\n')
+                        .map(l => l.replace(/^[\d.\-*]\s+/, '').replace(/^["']|["']$/g, '').trim())
+                        .filter(l => l.length > 10);
+                    
+                    if (lines.length >= 5) {
+                        return JSON.stringify(lines.slice(0, 5));
+                    }
                 }
             }
-
+            
             const fallback = deadline
                 ? `I have achieved ${goalContent} by ${dateStr}`
                 : `I have successfully achieved ${goalContent}`;
