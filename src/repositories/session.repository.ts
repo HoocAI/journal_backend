@@ -1,4 +1,6 @@
+import { Prisma } from '@prisma/client';
 import { prisma } from '../lib/prisma';
+
 import { hashRefreshToken } from '../services/auth/token.utils';
 
 export interface SessionData {
@@ -87,24 +89,31 @@ export const sessionRepository = {
         sessionId: string,
         newRefreshToken: string,
         newExpiresAt: Date
-    ): Promise<SessionData> {
+    ): Promise<SessionData | null> {
         const newRefreshTokenHash = hashRefreshToken(newRefreshToken);
 
-        const session = await prisma.session.update({
-            where: { id: sessionId },
-            data: {
-                refreshToken: newRefreshTokenHash,
-                expiresAt: newExpiresAt,
-            },
-        });
+        try {
+            const session = await prisma.session.update({
+                where: { id: sessionId },
+                data: {
+                    refreshToken: newRefreshTokenHash,
+                    expiresAt: newExpiresAt,
+                },
+            });
 
-        return {
-            id: session.id,
-            userId: session.userId,
-            refreshTokenHash: session.refreshToken,
-            expiresAt: session.expiresAt,
-            createdAt: session.createdAt,
-        };
+            return {
+                id: session.id,
+                userId: session.userId,
+                refreshTokenHash: session.refreshToken,
+                expiresAt: session.expiresAt,
+                createdAt: session.createdAt,
+            };
+        } catch (error) {
+            if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2025') {
+                return null;
+            }
+            throw error;
+        }
     },
 
     /**

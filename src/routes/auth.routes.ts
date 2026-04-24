@@ -3,13 +3,23 @@ import { z } from 'zod';
 import { authService, adminAuthService } from '../services/auth';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ValidationError, AppError } from '../utils/errors';
+import { requireProvisionalAuth } from '../middleware/auth.middleware';
 
 const router = Router();
 
-// Validation schemas
-const loginSchema = z.object({
-    email: z.string().email('Invalid email format'),
-    password: z.string().min(1, 'Password is required'),
+// ─── Validation Schemas ───────────────────────────────────────────────────────
+
+const googleLoginSchema = z.object({
+    idToken: z.string().min(1, 'ID Token is required'),
+});
+
+const firebaseLoginSchema = z.object({
+    idToken: z.string().min(1, 'Firebase ID Token is required'),
+});
+
+const verifyPhoneSchema = z.object({
+    phone: z.string().min(10, 'Phone number is required'),
+    otp: z.string().length(6, 'OTP must be 6 digits'),
 });
 
 const refreshTokenSchema = z.object({
@@ -20,128 +30,198 @@ const logoutSchema = z.object({
     sessionId: z.string().uuid('Invalid session ID'),
 });
 
-const googleLoginSchema = z.object({
-    idToken: z.string().min(1, 'ID Token is required'),
-});
-
-const phoneLoginSchema = z.object({
-    phone: z.string().min(10, 'Phone number is required'),
-    otp: z.string().length(6, 'OTP must be 6 digits'),
-});
-
-const signupSchema = z.object({
+const adminLoginSchema = z.object({
     email: z.string().email('Invalid email format'),
-    phone: z.string().optional(),
-    password: z.string().min(8, 'Password must be at least 8 characters'),
-    termsAccepted: z.preprocess(
-        (val) => val === true || val === 'true',
-        z.boolean().refine((val) => val === true, {
-            message: 'Terms of service must be accepted',
-        })
-    ),
-    privacyAccepted: z.preprocess(
-        (val) => val === true || val === 'true',
-        z.boolean().refine((val) => val === true, {
-            message: 'Privacy policy must be accepted',
-        })
-    ),
-    recordingAccepted: z.preprocess(
-        (val) => val === true || val === 'true',
-        z.boolean().refine((val) => val === true, {
-            message: 'Recording policy must be accepted',
-        })
-    ),
+    password: z.string().min(1, 'Password is required'),
 });
 
-router.post(
-    '/signup',
-    asyncHandler(async (req: Request, res: Response) => {
-        const parseResult = signupSchema.safeParse(req.body);
-        console.log(req.body);
+// ─── Step 1: Google OAuth (Login or Signup) ───────────────────────────────────
 
-        if (!parseResult.success) {
-            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
-        }
-
-        const { email, phone, password, termsAccepted, privacyAccepted, recordingAccepted } = parseResult.data;
-        const tokenPair = await authService.signup({
-            email,
-            phone,
-            password,
-            termsAccepted,
-            privacyAccepted,
-            recordingAccepted
-        });
-
-        res.status(201).json({
-            accessToken: tokenPair.accessToken,
-            refreshToken: tokenPair.refreshToken,
-            expiresIn: tokenPair.expiresIn,
-            tokenType: 'Bearer',
-        });
-    })
-);
-
-router.post(
-    '/login',
-    asyncHandler(async (req: Request, res: Response) => {
-        const parseResult = loginSchema.safeParse(req.body);
-        if (!parseResult.success) {
-            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
-        }
-
-        const { email, password } = parseResult.data;
-        const tokenPair = await authService.login({ email, password });
-
-        res.status(200).json({
-            accessToken: tokenPair.accessToken,
-            refreshToken: tokenPair.refreshToken,
-            expiresIn: tokenPair.expiresIn,
-            tokenType: 'Bearer',
-        });
-    })
-);
-
+/**
+ * POST /auth/google
+ * 
+ * Scenario A (New or Unverified User):
+ *   - Verifies Google ID token.
+ *   - Returns a PROVISIONAL token.
+ *   - User must proceed to Step 2 (Phone Verification).
+ * 
+ * Scenario B (Existing Verified User):
+ *   - Verifies Google ID token.
+ *   - Checks if `isPhoneVerified` is true.
+ *   - Returns a FULL ACCESS token (Login complete).
+ */
 router.post(
     '/google',
     asyncHandler(async (req: Request, res: Response) => {
+        const timestamp = new Date().toISOString();
+        console.log(`[${timestamp}] [AuthRoute] Incoming Google Login Request. IP: ${req.ip}`);
+        
         const parseResult = googleLoginSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            console.warn(`[${timestamp}] [AuthRoute] Validation failed:`, parseResult.error.flatten().fieldErrors);
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const result = await authService.googleLogin({ idToken: parseResult.data.idToken });
+        const resolvedId = 'userId' in result ? result.userId : result.user?.id;
+        console.log(`[${timestamp}] [AuthRoute] Success: Issue ${'provisionalToken' in result ? 'Provisional' : 'Full Access'} token for UID: ${resolvedId}`);
+
+        res.status(200).json(result);
+    })
+);
+
+// ─── Firebase Phone Login ───────────────────────────────────────────────────
+
+/**
+ * POST /auth/firebase/phone
+ * 
+ * Verifies the Firebase ID token (derived from Phone Auth on client).
+ * Creates or identifies user, returns full access token pair.
+ */
+router.post(
+    '/firebase/phone',
+    asyncHandler(async (req: Request, res: Response) => {
+        const timestamp = new Date().toISOString();
+        console.log(`[${timestamp}] [AuthRoute] Incoming Firebase Phone Login Request. IP: ${req.ip}`);
+        
+        const parseResult = firebaseLoginSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            console.warn(`[${timestamp}] [AuthRoute] Validation failed:`, parseResult.error.flatten().fieldErrors);
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const result = await authService.firebasePhoneLogin(parseResult.data.idToken);
+        
+        console.log(`[${timestamp}] [AuthRoute] Success: Issue Session for phone user UID: ${result.user?.id}`);
+
+        res.status(200).json(result);
+    })
+);
+
+/**
+ * POST /auth/firebase/verify-phone
+ * 
+ * Step 2 of Signup flow.
+ * Requires Authorization: Bearer <provisionalToken> from Google Step.
+ * Verifies Firebase token, links phone, and completes signup.
+ */
+router.post(
+    '/firebase/verify-phone',
+    requireProvisionalAuth(),
+    asyncHandler(async (req: Request, res: Response) => {
+        const timestamp = new Date().toISOString();
+        const userId = req.user!.userId;
+        console.log(`[${timestamp}] [AuthRoute] Incoming Firebase Phone Verification for UID: ${userId}`);
+
+        const parseResult = firebaseLoginSchema.safeParse(req.body);
         if (!parseResult.success) {
             throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
         }
 
-        const { idToken } = parseResult.data;
-        const tokenPair = await authService.googleLogin(idToken);
+        const result = await authService.firebasePhoneVerify(userId, parseResult.data.idToken);
+        console.log(`[${timestamp}] [AuthRoute] Success: Signup completed for UID: ${userId}`);
 
-        res.status(200).json({
-            accessToken: tokenPair.accessToken,
-            refreshToken: tokenPair.refreshToken,
-            expiresIn: tokenPair.expiresIn,
-            tokenType: 'Bearer',
-        });
+        res.status(200).json(result);
     })
 );
 
+// ─── Direct Phone Login ───────────────────────────────────────────────────────
+
+/**
+ * POST /auth/login/phone/initiate
+ * Initiate phone login by requesting an OTP.
+ * Assumes user already exists (Login Only).
+ */
 router.post(
-    '/phone',
+    '/login/phone/initiate',
     asyncHandler(async (req: Request, res: Response) => {
-        const parseResult = phoneLoginSchema.safeParse(req.body);
+        const schema = z.object({
+            phone: z.string().min(10, 'Phone number is required'),
+        });
+
+        const parseResult = schema.safeParse(req.body);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const result = await authService.requestPhoneLogin(parseResult.data.phone);
+        res.status(200).json(result);
+    })
+);
+
+/**
+ * POST /auth/login/phone/verify
+ * Verify OTP and login.
+ * Returns full access token.
+ */
+router.post(
+    '/login/phone/verify',
+    asyncHandler(async (req: Request, res: Response) => {
+        const schema = z.object({
+            phone: z.string().min(10, 'Phone number is required'),
+            otp: z.string().length(6, 'OTP must be 6 digits'),
+        });
+
+        const parseResult = schema.safeParse(req.body);
         if (!parseResult.success) {
             throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
         }
 
         const { phone, otp } = parseResult.data;
-        const tokenPair = await authService.phoneLogin(phone, otp);
+        const tokenPair = await authService.verifyPhoneLogin(phone, otp);
 
         res.status(200).json({
             accessToken: tokenPair.accessToken,
             refreshToken: tokenPair.refreshToken,
             expiresIn: tokenPair.expiresIn,
             tokenType: 'Bearer',
+            user: tokenPair.user,
         });
     })
 );
 
+// ─── Step 2: Phone OTP Verification (Signup Completion) ───────────────────────
+
+/**
+ * POST /auth/verify-phone
+ * Step 2 of 2-step signup.
+ * Requires Authorization: Bearer <provisionalToken> from Step 1.
+ * Verifies OTP, links phone number, and returns a full access + refresh token pair.
+ */
+router.post(
+    '/verify-phone',
+    requireProvisionalAuth(),
+    asyncHandler(async (req: Request, res: Response) => {
+        const timestamp = new Date().toISOString();
+        const userId = req.user!.userId;
+        console.log(`[${timestamp}] [AuthRoute] Incoming Phone Verification Request for UID: ${userId}. IP: ${req.ip}`);
+
+        const parseResult = verifyPhoneSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            console.warn(`[${timestamp}] [AuthRoute] Validation failed:`, parseResult.error.flatten().fieldErrors);
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const { phone, otp } = parseResult.data;
+        const tokenPair = await authService.verifyPhone(userId, phone, otp);
+        console.log(`[${timestamp}] [AuthRoute] Success: Full Session established for UID: ${userId} (${phone})`);
+
+        res.status(200).json({
+            accessToken: tokenPair.accessToken,
+            refreshToken: tokenPair.refreshToken,
+            expiresIn: tokenPair.expiresIn,
+            tokenType: 'Bearer',
+            user: tokenPair.user,
+        });
+    })
+);
+
+// ─── Token Management ─────────────────────────────────────────────────────────
+
+/**
+ * POST /auth/refresh
+ * Get a new access token using a valid refresh token.
+ */
 router.post(
     '/refresh',
     asyncHandler(async (req: Request, res: Response) => {
@@ -150,8 +230,7 @@ router.post(
             throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
         }
 
-        const { refreshToken } = parseResult.data;
-        const tokenPair = await authService.refreshToken(refreshToken);
+        const tokenPair = await authService.refreshToken(parseResult.data.refreshToken);
 
         res.status(200).json({
             accessToken: tokenPair.accessToken,
@@ -162,10 +241,13 @@ router.post(
     })
 );
 
+/**
+ * POST /auth/logout
+ * Invalidate the current session.
+ */
 router.post(
     '/logout',
     asyncHandler(async (req: Request, res: Response) => {
-        // Get userId from Authorization header token
         const authHeader = req.headers.authorization;
         if (!authHeader?.startsWith('Bearer ')) {
             res.status(200).json({ message: 'Logged out successfully' });
@@ -178,42 +260,98 @@ router.post(
         }
 
         const { sessionId } = parseResult.data;
-
-        // Extract userId from token (we need to decode it)
         const token = authHeader.substring(7);
+
         try {
             const { validateAccessToken } = await import('../services/auth/token.utils');
             const payload = validateAccessToken(token);
             await authService.logout(payload.userId, sessionId);
         } catch {
-            // Even if token validation fails, return success to prevent info leakage
+            // Return success even on token error to prevent info leakage
         }
 
         res.status(200).json({ message: 'Logged out successfully' });
     })
 );
 
+/**
+ * POST /auth/fallback
+ * Bypass OTP/Google Auth by providing a phone number.
+ * ONLY FOR TESTING.
+ */
 router.post(
-    '/admin/login',
+    '/fallback',
     asyncHandler(async (req: Request, res: Response) => {
-        const parseResult = loginSchema.safeParse(req.body);
+        const schema = z.object({
+            phone: z.string().min(10, 'Phone number is required'),
+        });
+
+        const parseResult = schema.safeParse(req.body);
         if (!parseResult.success) {
             throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
         }
 
-        const { email, password } = parseResult.data;
-        const tokenPair = await adminAuthService.login({ email, password });
+        const tokenPair = await authService.loginFallback(parseResult.data.phone);
 
         res.status(200).json({
             accessToken: tokenPair.accessToken,
             refreshToken: tokenPair.refreshToken,
             expiresIn: tokenPair.expiresIn,
             tokenType: 'Bearer',
+            user: tokenPair.user,
         });
     })
 );
 
-// Error handling middleware for this router
+/**
+ * POST /auth/mock/send-otp
+ * Mock endpoint to request OTP.
+ * ONLY FOR TESTING.
+ */
+router.post(
+    '/mock/send-otp',
+    asyncHandler(async (req: Request, res: Response) => {
+        const schema = z.object({ phone: z.string().min(10, 'Phone number is required') });
+        const parseResult = schema.safeParse(req.body);
+        if (!parseResult.success) throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        
+        console.log(`[Mock] OTP requested for ${parseResult.data.phone}: 123456`);
+        res.status(200).json({ message: 'OTP sent successfully (Mock: use 123456)', success: true });
+    })
+);
+
+/**
+ * POST /auth/mock/verify-otp
+ * Mock endpoint to verify OTP. Auto-creates user if they don't exist.
+ * ONLY FOR TESTING.
+ */
+router.post(
+    '/mock/verify-otp',
+    asyncHandler(async (req: Request, res: Response) => {
+        const schema = z.object({
+            phone: z.string().min(10, 'Phone number is required'),
+            otp: z.string().length(6, 'OTP must be 6 digits')
+        });
+        const parseResult = schema.safeParse(req.body);
+        if (!parseResult.success) throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        
+        const { phone, otp } = parseResult.data;
+        if (otp !== '123456') throw new AuthError('Invalid OTP', 'AUTH_INVALID_OTP');
+        
+        const tokenPair = await authService.mockVerifyOtp(phone);
+        res.status(200).json({
+            accessToken: tokenPair.accessToken,
+            refreshToken: tokenPair.refreshToken,
+            expiresIn: tokenPair.expiresIn,
+            tokenType: 'Bearer',
+            user: tokenPair.user,
+        });
+    })
+);
+
+
+// ─── Error Handler ────────────────────────────────────────────────────────────
+
 router.use((err: Error, _req: Request, res: Response, _next: Function) => {
     if (err instanceof AppError) {
         res.status(err.statusCode).json(err.toJSON());

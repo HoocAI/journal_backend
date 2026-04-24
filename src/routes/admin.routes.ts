@@ -7,9 +7,39 @@ import { ValidationError, UploadError } from '../utils/errors';
 import { questionService } from '../services/question';
 import { userManagementService } from '../services/admin/user-management.service';
 import { adminAudioService } from '../services/admin/admin-audio.service';
-import { adminAudioUpload, ALLOWED_AUDIO_TYPES } from '../utils/upload';
+import { adminAudioUpload, ALLOWED_AUDIO_TYPES, generateFilename } from '../utils/upload';
+import { getFirebaseStatus } from '../config/firebase.config';
+import { uploadFileToS3 } from '../utils/s3';
+import { prisma } from '../lib/prisma';
 
 const router = Router();
+
+// GET /api/v1/admin/diagnostics - Check system status
+router.get(
+    '/diagnostics',
+    asyncHandler(async (_req: Request, res: Response) => {
+        const firebaseStatus = getFirebaseStatus();
+
+        // Simple DB check
+        let dbStatus = 'unknown';
+        try {
+            await prisma.$queryRaw`SELECT 1`;
+            dbStatus = 'connected';
+        } catch (err: any) {
+            dbStatus = `error: ${err.message}`;
+        }
+
+        res.status(200).json({
+            status: firebaseStatus.initialized && dbStatus === 'connected' ? 'healthy' : 'unhealthy',
+            services: {
+                firebase: firebaseStatus,
+                database: { status: dbStatus },
+                environment: process.env.NODE_ENV || 'development'
+            },
+            timestamp: new Date().toISOString()
+        });
+    })
+);
 
 // Validation schemas
 const createQuestionSetSchema = z.object({
@@ -113,6 +143,20 @@ router.patch(
     })
 );
 
+// DELETE /api/v1/admin/users/:userId - Delete a user
+router.delete(
+    '/users/:userId',
+    asyncHandler(async (req: Request, res: Response) => {
+        const parseResult = userIdParamSchema.safeParse(req.params);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        await userManagementService.deleteUser(parseResult.data.userId);
+        res.status(204).send();
+    })
+);
+
 // POST /api/v1/admin/audio - Upload new admin audio
 router.post(
     '/audio',
@@ -128,10 +172,16 @@ router.post(
             throw UploadError.invalidFileType(ALLOWED_AUDIO_TYPES);
         }
 
-        const audioUrl = `/uploads/admin/audio/${req.file.filename}`;
+        const file = req.file;
+        const filename = generateFilename(undefined, file.originalname);
+        const s3Key = `admin/audio/${filename}`;
+        
+        const audioUrl = await uploadFileToS3(file.buffer, s3Key, file.mimetype);
+
         const audio = await adminAudioService.createAudio({
             title: parseResult.data.title,
             audioUrl,
+            s3Key
         });
 
         res.status(201).json(audio);
@@ -161,5 +211,153 @@ function handleMulterError(err: Error, _req: Request, _res: Response, next: Next
 }
 
 router.use(handleMulterError);
+
+// ─── Quotes ───────────────────────────────────────────────────────────────────
+
+const createQuoteSchema = z.object({
+    text: z.string().min(1, 'Quote text is required'),
+    author: z.string().optional(),
+    mood: z.enum([
+        'VERY_BAD', 'BAD', 'NEUTRAL', 'GOOD', 'VERY_GOOD',
+        'JOYFUL', 'EXCITED', 'PROUD', 'GRATEFUL', 'PEACEFUL', 'CONTENT', 'PLAYFUL', 'HOPEFUL', 'CURIOUS',
+        'SAD', 'DEPRESSED', 'LONELY', 'HURT', 'DISAPPOINTED',
+        'ANGRY', 'FRUSTRATED', 'ANNOYED', 'ANXIOUS', 'OVERWHELMED', 'STRESSED', 'NERVOUS', 'INSECURE',
+        'TIRED', 'BORED', 'NUMB', 'GUILTY', 'ASHAMED'
+    ]),
+});
+
+const quoteIdSchema = z.object({
+    id: z.string().uuid('Invalid quote ID'),
+});
+
+import { quoteService } from '../services/admin/quote.service';
+
+// POST /api/v1/admin/quotes - Create a new quote
+router.post(
+    '/quotes',
+    asyncHandler(async (req: Request, res: Response) => {
+        const parseResult = createQuoteSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const quote = await quoteService.createQuote(parseResult.data);
+        res.status(201).json(quote);
+    })
+);
+
+// GET /api/v1/admin/quotes - List all quotes (optional: ?mood=JOYFUL)
+router.get(
+    '/quotes',
+    asyncHandler(async (req: Request, res: Response) => {
+        const mood = req.query.mood as any; // Type casting for simplicity, service handles logic
+        const quotes = await quoteService.getQuotes(mood);
+        res.status(200).json(quotes);
+    })
+);
+
+// DELETE /api/v1/admin/quotes/:id - Delete a quote
+router.delete(
+    '/quotes/:id',
+    asyncHandler(async (req: Request, res: Response) => {
+        const parseResult = quoteIdSchema.safeParse(req.params);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        await quoteService.deleteQuote(parseResult.data.id);
+        res.status(204).send();
+    })
+);
+
+// ─── Affirmations ─────────────────────────────────────────────────────────────
+
+import { affirmationService } from '../services/admin/affirmation.service';
+
+const createAffirmationSchema = z.object({
+    text: z.string().min(1, 'Affirmation text is required'),
+    author: z.string().optional(),
+    mood: z.enum([
+        'VERY_BAD', 'BAD', 'NEUTRAL', 'GOOD', 'VERY_GOOD',
+        'JOYFUL', 'EXCITED', 'PROUD', 'GRATEFUL', 'PEACEFUL', 'CONTENT', 'PLAYFUL', 'HOPEFUL', 'CURIOUS',
+        'SAD', 'DEPRESSED', 'LONELY', 'HURT', 'DISAPPOINTED',
+        'ANGRY', 'FRUSTRATED', 'ANNOYED', 'ANXIOUS', 'OVERWHELMED', 'STRESSED', 'NERVOUS', 'INSECURE',
+        'TIRED', 'BORED', 'NUMB', 'GUILTY', 'ASHAMED'
+    ]),
+});
+
+const affirmationIdSchema = z.object({
+    id: z.string().uuid('Invalid affirmation ID'),
+});
+
+// POST /api/v1/admin/affirmations - Create a new affirmation
+router.post(
+    '/affirmations',
+    asyncHandler(async (req: Request, res: Response) => {
+        const parseResult = createAffirmationSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const affirmation = await affirmationService.createAffirmation(parseResult.data);
+        res.status(201).json(affirmation);
+    })
+);
+
+// GET /api/v1/admin/affirmations - List all affirmations (optional: ?mood=JOYFUL)
+router.get(
+    '/affirmations',
+    asyncHandler(async (req: Request, res: Response) => {
+        const mood = req.query.mood as any;
+        const affirmations = await affirmationService.getAffirmations(mood);
+        res.status(200).json(affirmations);
+    })
+);
+
+// DELETE /api/v1/admin/affirmations/:id - Delete an affirmation
+router.delete(
+    '/affirmations/:id',
+    asyncHandler(async (req: Request, res: Response) => {
+        const parseResult = affirmationIdSchema.safeParse(req.params);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        await affirmationService.deleteAffirmation(parseResult.data.id);
+        res.status(204).send();
+    })
+);
+
+// ─── Notifications ─────────────────────────────────────────────────────────────
+
+import { notificationService } from '../services/notification.service';
+
+const sendNotificationSchema = z.object({
+    title: z.string().min(1, 'Title is required'),
+    body: z.string().min(1, 'Body is required'),
+    userId: z.string().uuid().optional(), // If provided, send to specific user; else send to all
+    data: z.record(z.any()).optional(),
+});
+
+// POST /api/v1/admin/send-notification - Send notification
+router.post(
+    '/send-notification',
+    asyncHandler(async (req: Request, res: Response) => {
+        const parseResult = sendNotificationSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const { title, body, userId, data } = parseResult.data;
+
+        if (userId) {
+            await notificationService.sendToUser(userId, title, body, data);
+            res.status(200).json({ message: `Notification sent to user ${userId}` });
+        } else {
+            const result = await notificationService.sendToAll(title, body, data);
+            res.status(200).json({ message: 'Notification sent to all users', result });
+        }
+    })
+);
 
 export { router as adminRouter };

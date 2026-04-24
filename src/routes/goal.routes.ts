@@ -1,15 +1,34 @@
 import { Router, Request, Response } from 'express';
 import { z } from 'zod';
-import { requireAuth } from '../middleware';
+import { requireAuth } from '../middleware/auth.middleware';
+import { requireAdmin } from '../middleware/admin.middleware';
+
 import { asyncHandler } from '../utils/asyncHandler';
 import { ValidationError } from '../utils/errors';
 import { goalService } from '../services/goal';
 
 const router = Router();
 
+const GOAL_TYPES = ['financial', 'health', 'career', 'personal', 'spiritual', 'relationships', 'social'] as const;
+
 const createGoalSchema = z.object({
-    type: z.string(),
+    type: z.enum(GOAL_TYPES),
     content: z.string(),
+    deadline: z.string().optional(),
+    isAutomated: z.boolean().optional(),
+    targetValue: z.string().optional(),
+    templateKey: z.string().optional(),
+});
+
+const updateCategorySchema = z.object({
+    type: z.enum(GOAL_TYPES),
+    goals: z.array(z.object({
+        content: z.string(),
+        deadline: z.string().optional(),
+        isAutomated: z.boolean().optional(),
+        targetValue: z.string().optional(),
+        templateKey: z.string().optional(),
+    })),
 });
 
 const updateGoalSchema = z.object({
@@ -18,7 +37,32 @@ const updateGoalSchema = z.object({
 
 router.use(requireAuth());
 
-// POST /api/v1/goals - Create a goal
+// GET /api/v1/goals/admin/all - Get all goals (Admin only)
+router.get(
+    '/admin/all',
+    requireAdmin,
+    asyncHandler(async (req: Request, res: Response) => {
+        const goals = await goalService.getAllGoals();
+        res.status(200).json(goals);
+    })
+);
+
+// POST /api/v1/goals/category - Target overwrite for a category
+router.post(
+    '/category',
+    asyncHandler(async (req: Request, res: Response) => {
+        const parseResult = updateCategorySchema.safeParse(req.body);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const { type, goals } = parseResult.data;
+        const updatedGoals = await goalService.updateCategoryGoals(req.user!.userId, type, goals);
+        res.status(200).json(updatedGoals);
+    })
+);
+
+// POST /api/v1/goals - Create a single goal
 router.post(
     '/',
     asyncHandler(async (req: Request, res: Response) => {
@@ -36,7 +80,9 @@ router.post(
 router.get(
     '/me',
     asyncHandler(async (req: Request, res: Response) => {
+        console.log(`[GoalRoute] Fetching goals for user: ${req.user!.userId}`);
         const goals = await goalService.getUserGoals(req.user!.userId);
+        console.log(`[GoalRoute] Found ${goals.length} goals. Sending response...`);
         res.status(200).json(goals);
     })
 );

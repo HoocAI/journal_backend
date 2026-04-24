@@ -4,12 +4,14 @@ export interface AdminAudioData {
     id: string;
     title: string;
     audioUrl: string;
+    s3Key?: string | null;
     createdAt: Date;
 }
 
 export interface CreateAdminAudioInput {
     title: string;
     audioUrl: string;
+    s3Key?: string;
 }
 
 /**
@@ -24,6 +26,7 @@ export const adminAudioRepository = {
             data: {
                 title: input.title,
                 audioUrl: input.audioUrl,
+                s3Key: input.s3Key,
             },
         });
     },

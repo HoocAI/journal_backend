@@ -4,20 +4,27 @@ import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '.
 export interface CreateJournalInput {
     content: string;
     photoUrl?: string;
+    photoS3Key?: string;
     audioUrl?: string;
+    audioS3Key?: string;
 }
 
 export interface UpdateJournalInput {
     content?: string;
     photoUrl?: string;
+    photoS3Key?: string;
     audioUrl?: string;
+    audioS3Key?: string;
 }
 
 export const journalService = {
     async createEntry(userId: string, input: CreateJournalInput) {
         // Check if user is disabled
         const user = await userRepository.findById(userId);
-        if (user && !user.isActive) {
+        if (!user) {
+            throw new NotFoundError('User not found');
+        }
+        if (!user.isActive) {
             throw ForbiddenError.accountDisabled();
         }
 
@@ -30,13 +37,53 @@ export const journalService = {
             throw ConflictError.journalEntryExists(today);
         }
 
-        return journalRepository.create({
+        const entry = await journalRepository.create({
             userId,
             content: input.content,
             photoUrl: input.photoUrl,
+            photoS3Key: input.photoS3Key,
             audioUrl: input.audioUrl,
+            audioS3Key: input.audioS3Key,
             entryDate: today,
         });
+
+        // Update Streak and Coins
+        const lastEntryDate = user.lastEntryDate ? new Date(user.lastEntryDate) : null;
+        let newStreak = user.currentStreak;
+        const yesterday = new Date(today);
+        yesterday.setDate(yesterday.getDate() - 1);
+        yesterday.setHours(0, 0, 0, 0);
+
+        if (!lastEntryDate) {
+            newStreak = 1;
+        } else {
+            const lastDateOnly = new Date(lastEntryDate);
+            lastDateOnly.setHours(0, 0, 0, 0);
+
+            if (lastDateOnly.getTime() === yesterday.getTime()) {
+                newStreak += 1;
+            } else if (lastDateOnly.getTime() < yesterday.getTime()) {
+                newStreak = 1;
+            }
+        }
+
+        const longestStreak = Math.max(user.longestStreak, newStreak);
+        const newCoins = user.coins + 1;
+
+        let plan = user.plan;
+        if (newStreak === 14) {
+            plan = 'PREMIUM';
+        }
+
+        await userRepository.update(userId, {
+            currentStreak: newStreak,
+            longestStreak,
+            lastEntryDate: today,
+            coins: newCoins,
+            plan
+        });
+
+        return entry;
     },
 
     async updateEntry(id: string, userId: string, input: UpdateJournalInput) {

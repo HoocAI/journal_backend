@@ -1,7 +1,7 @@
 import { prisma } from '../lib/prisma';
 
 export const journalRepository = {
-    async create(data: { userId: string; content: string; photoUrl?: string; audioUrl?: string; entryDate: Date }) {
+    async create(data: { userId: string; content: string; photoUrl?: string; photoS3Key?: string; audioUrl?: string; audioS3Key?: string; entryDate: Date }) {
         return prisma.journalEntry.create({ data });
     },
 
@@ -35,7 +35,7 @@ export const journalRepository = {
         });
     },
 
-    async update(id: string, data: { content?: string; photoUrl?: string; audioUrl?: string }) {
+    async update(id: string, data: { content?: string; photoUrl?: string; photoS3Key?: string; audioUrl?: string; audioS3Key?: string }) {
         return prisma.journalEntry.update({
             where: { id },
             data,

@@ -1,8 +1,8 @@
-import { MoodType } from '../../generated/prisma';
+import { MoodType } from '@prisma/client';
 import { prisma } from '../lib/prisma';
 
 export const moodRepository = {
-    async create(data: { userId: string; mood: MoodType; reason?: string; entryDate: Date }) {
+    async create(data: { userId: string; mood: MoodType; reason?: string; whySuchMood?: string; whyThisMood?: string; entryDate: Date }) {
         return prisma.moodEntry.create({ data });
     },
 

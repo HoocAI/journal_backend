@@ -4,6 +4,7 @@ import { requireAuth } from '../middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ValidationError } from '../utils/errors';
 import { moodService } from '../services/mood/mood.service';
+import { MoodType } from '@prisma/client';
 
 const router = Router();
 
@@ -19,6 +20,8 @@ const MoodTypeEnum = z.enum([
 const createMoodSchema = z.object({
     mood: MoodTypeEnum,
     reason: z.string().optional(),
+    whySuchMood: z.string().optional(),
+    whyThisMood: z.string().optional(),
 });
 
 router.use(requireAuth());
@@ -35,7 +38,9 @@ router.post(
 
         const entry = await moodService.createEntry(req.user!.userId, {
             mood: parseResult.data.mood,
-            reason: parseResult.data.reason
+            reason: parseResult.data.reason,
+            whySuchMood: parseResult.data.whySuchMood,
+            whyThisMood: parseResult.data.whyThisMood,
         });
 
         res.status(201).json(entry);
@@ -48,6 +53,15 @@ router.get(
     asyncHandler(async (req: Request, res: Response) => {
         const entry = await moodService.getAllEntries(req.user!.userId);
         res.status(200).json(entry);
+    })
+);
+
+// GET /api/v1/mood/types - Get all valid mood types
+router.get(
+    '/types',
+    asyncHandler(async (_req: Request, res: Response) => {
+        const types = Object.values(MoodType);
+        res.status(200).json(types);
     })
 );
 

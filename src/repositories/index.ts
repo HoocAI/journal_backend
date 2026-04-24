@@ -13,3 +13,5 @@ export {
 } from './admin-audio.repository';
 export { goalRepository, type GoalData } from './goal.repository';
 export { moodRepository } from './mood.repository';
+export { visionBoardRepository } from './vision-board.repository';
+export { dailyPhotoRepository } from './daily-photo.repository';

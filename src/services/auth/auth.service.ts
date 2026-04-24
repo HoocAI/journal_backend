@@ -2,6 +2,7 @@ import bcrypt from 'bcrypt';
 import {
     generateAccessToken,
     generateRefreshToken,
+    generateProvisionalToken,
     validateRefreshToken,
     hashRefreshToken,
     verifyRefreshTokenHash,
@@ -10,204 +11,240 @@ import {
 } from './token.utils';
 import { sessionRepository } from '../../repositories/session.repository';
 import { userRepository } from '../../repositories/user.repository';
-import { AuthError, ConflictError, AppError } from '../../utils/errors';
+import { AuthError, ConflictError } from '../../utils/errors';
 import { prisma } from '../../lib/prisma';
 import { OAuth2Client } from 'google-auth-library';
+import { firebaseAdmin } from '../../config/firebase.config';
 import type { TokenPair, LoginCredentials, PremiumStatus, TrialInfo } from '../../types';
 
 const SALT_ROUNDS = 10;
 const TRIAL_DURATION_DAYS = parseInt(process.env.TRIAL_DURATION_DAYS ?? '21', 10);
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID;
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET;
 
-const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID);
+const googleClient = new OAuth2Client(GOOGLE_CLIENT_ID, GOOGLE_CLIENT_SECRET);
 
-export interface SignupInput {
-    email: string;
-    phone?: string;
-    password: string;
-    termsAccepted: boolean;
-    privacyAccepted: boolean;
-    recordingAccepted: boolean;
+export interface ProvisionalResponse {
+    provisionalToken: string;
+    requiresPhoneVerification: true;
+    userId: string;
 }
 
 /**
- * Authentication service for user login, logout, and token management
+ * Authentication service — 2-step signup only:
+ *   Step 1: googleLogin()  → returns provisionalToken
+ *   Step 2: verifyPhone()  → returns full TokenPair
  */
 export const authService = {
     /**
-     * Registers a new user with consent
-     * Returns access and refresh token pair
+     * STEP 1 — Google OAuth
+     * Verifies the Google ID token, creates the user account if new,
+     * and returns a short-lived provisional token.
+     * No session is created yet.
      */
-    async signup(input: SignupInput): Promise<TokenPair> {
-        const { email, password, termsAccepted, privacyAccepted, recordingAccepted } = input;
+    async googleLogin(params: { idToken?: string; code?: string; redirectUri?: string }): Promise<ProvisionalResponse | TokenPair> {
+        const { idToken, code, redirectUri } = params;
+        console.log(`[AuthService] Initiating Google login. Type: ${code ? 'Auth Code' : 'ID Token'}`);
 
-        // Check if user already exists
-        const existingUser = await userRepository.findByEmail(email);
-        if (existingUser) {
-            throw new ConflictError('User with this email already exists', 'USER_ALREADY_EXISTS');
+        if (!GOOGLE_CLIENT_ID) {
+            console.error('[AuthService] CRITICAL: Google Client ID not configured');
+            throw new AuthError('Google Client ID not configured', 'AUTH_CONFIG_ERROR', 500);
         }
 
-        // Validate consent
-        if (!termsAccepted || !privacyAccepted || !recordingAccepted) {
-            throw new AuthError('Terms and privacy policy must be accepted', 'AUTH_CONSENT_REQUIRED');
-        }
-
-        // Hash password
-        const passwordHash = await bcrypt.hash(password, SALT_ROUNDS);
-
-        // Calculate trial end date
-        const trialEndsAt = new Date();
-        trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DURATION_DAYS);
-
-        // Create user and consent in a transaction
-        const user = await prisma.$transaction(async (tx: Parameters<Parameters<typeof prisma.$transaction>[0]>[0]) => {
-            const newUser = await tx.user.create({
-                data: {
-                    email: email.toLowerCase(),
-                    phone: input.phone,
-                    passwordHash,
-                    role: 'USER',
-                    plan: 'TRIAL',
-                    trialEndsAt,
-                },
-            });
-
-            await tx.consent.create({
-                data: {
-                    userId: newUser.id,
-                    termsAccepted,
-                    privacyAccepted,
-                    recordingAccepted
-                },
-            });
-
-            return newUser;
-        });
-
-        // Generate tokens
-        const refreshToken = generateRefreshToken({
-            userId: user.id,
-            sessionId: '',
-        });
-
-        const expiresAt = new Date(Date.now() + getRefreshTokenExpiresIn() * 1000);
-
-        // Create session
-        const session = await sessionRepository.create({
-            userId: user.id,
-            refreshToken,
-            expiresAt,
-        });
-
-        // Generate final tokens with session ID
-        const accessToken = generateAccessToken({
-            userId: user.id,
-            sessionId: session.id,
-            isPremium: true, // Trial users have premium access
-        });
-
-        const finalRefreshToken = generateRefreshToken({
-            userId: user.id,
-            sessionId: session.id,
-        });
-
-        await sessionRepository.updateRefreshToken(session.id, finalRefreshToken, expiresAt);
-
-        return {
-            accessToken,
-            refreshToken: finalRefreshToken,
-            expiresIn: getAccessTokenExpiresIn(),
-            user: {
-                id: user.id,
-                email: user.email,
-                phone: user.phone,
-                name: user.name,
-                onboardingCompleted: user.onboardingCompleted,
-                goalsSet: user.goalsSet,
+        let payload;
+        try {
+            if (code) {
+                // Scenario A: Authorization Code Flow
+                const { tokens } = await googleClient.getToken({
+                    code,
+                    redirect_uri: redirectUri || 'postmessage' // 'postmessage' is standard for Flutter/Web direct exchange
+                });
+                const ticket = await googleClient.verifyIdToken({
+                    idToken: tokens.id_token!,
+                    audience: GOOGLE_CLIENT_ID,
+                });
+                payload = ticket.getPayload();
+            } else if (idToken) {
+                // Scenario B: Direct ID Token Flow
+                const ticket = await googleClient.verifyIdToken({
+                    idToken,
+                    audience: GOOGLE_CLIENT_ID,
+                });
+                payload = ticket.getPayload();
+            } else {
+                throw new AuthError('Missing authentication token/code', 'AUTH_INVALID_TOKEN');
             }
+            console.log(`[AuthService] Token verified for email: ${payload?.email}`);
+        } catch (err: any) {
+            console.error('[AuthService] Google verification failed:', err.message);
+            throw new AuthError('Invalid Google token', 'AUTH_INVALID_TOKEN');
+        }
+
+        if (!payload || !payload.email || !payload.sub) {
+            throw new AuthError('Google token missing email or ID', 'AUTH_INVALID_TOKEN');
+        }
+
+        const email = payload.email.toLowerCase();
+        const googleId = payload.sub;
+
+        // Try finding by Google ID first
+        let user = await userRepository.findByGoogleId(googleId);
+
+        // Fallback to email for older accounts not yet linked
+        if (!user) {
+            user = await userRepository.findByEmail(email);
+            if (user) {
+                console.log(`[AuthService] Linking Google ID to existing user: ${email}`);
+                user = await userRepository.update(user.id, { googleId });
+            }
+        }
+
+        if (!user) {
+            console.log(`[AuthService] New user detected: ${email}. Creating account...`);
+            // New user — create account (no session yet)
+            const trialEndsAt = new Date();
+            trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DURATION_DAYS);
+
+            user = await prisma.$transaction(async (tx) => {
+                const newUser = await tx.user.create({
+                    data: {
+                        email,
+                        googleId,
+                        passwordHash: await bcrypt.hash(Math.random().toString(36), SALT_ROUNDS),
+                        role: 'USER',
+                        plan: 'TRIAL',
+                        trialEndsAt,
+                        name: payload?.name || null,
+                        isEmailVerified: true,
+                    },
+                });
+
+                await tx.consent.create({
+                    data: {
+                        userId: newUser.id,
+                        termsAccepted: true,
+                        privacyAccepted: true,
+                        recordingAccepted: true,
+                    },
+                });
+
+                return newUser;
+            });
+        } else {
+            // Existing user — mark email as verified if not already
+            if (!user.isEmailVerified) {
+                console.log(`[AuthService] Mark existing user ${email} as email verified`);
+                user = await userRepository.update(user.id, { isEmailVerified: true });
+            }
+
+            if (!user.isActive) {
+                console.warn(`[AuthService] Deactivated user attempted login: ${email}`);
+                throw new AuthError('Account is deactivated', 'AUTH_ACCOUNT_DEACTIVATED');
+            }
+            console.log(`[AuthService] User found: ${email}`);
+        }
+
+        if (!user) {
+            throw new AuthError('Failed to identify or create user', 'AUTH_INTERNAL_ERROR', 500);
+        }
+
+        // If user is already phone verified, log them in directly
+        if (user.isPhoneVerified) {
+            console.log(`[AuthService] User ${email} (ID: ${user.id}) is already phone verified. Proceeding to create session.`);
+            return this.createSession(user.id);
+        }
+
+        console.log(`[AuthService] User ${email} (ID: ${user.id}) requires phone verification. Generating short-lived provisional token.`);
+        const provisionalToken = generateProvisionalToken({ userId: user.id });
+
+        console.log(`[AuthService] Provisional flow completed for ${email}. Returning token.`);
+        return {
+            provisionalToken,
+            requiresPhoneVerification: true,
+            userId: user.id,
         };
     },
 
     /**
-     * Authenticates a user with email and password
-     * Returns access and refresh token pair
+     * Request OTP for Phone Login
      */
-    async login(credentials: LoginCredentials): Promise<TokenPair> {
-        const { email, password } = credentials;
+    async requestPhoneLogin(phone: string): Promise<{ message: string; requiresSignup: boolean }> {
+        const user = await userRepository.findByPhone(phone);
 
-        // Find user by email
-        const user = await userRepository.findByEmail(email);
+        // Ensure user exists for login
+        // If you want to support phone-only SIGNUP, this logic needs to change.
+        // For now, assuming "Login" implies existing user.
         if (!user) {
-            throw AuthError.invalidCredentials();
+            throw new AuthError('User not found with this phone number', 'AUTH_USER_NOT_FOUND');
         }
 
-        // Verify password
-        const isValidPassword = await bcrypt.compare(password, user.passwordHash);
-        if (!isValidPassword) {
-            throw AuthError.invalidCredentials();
+        // Generate OTP (Mock for now)
+        // In real app: generate random 6-digit, store in Redis/DB with expiry, send via SMS
+        console.log(`[DEV] OTP for ${phone}: 123456`);
+
+        return {
+            message: 'OTP sent successfully',
+            requiresSignup: false,
+        };
+    },
+
+    /**
+     * Verify OTP and Login with Phone
+     */
+    async verifyPhoneLogin(phone: string, otp: string): Promise<TokenPair> {
+        // Dev: mock OTP
+        if (otp !== '123456') {
+            throw new AuthError('Invalid OTP', 'AUTH_INVALID_OTP');
         }
 
-        // Check if user is active
+        const user = await userRepository.findByPhone(phone);
+        if (!user) {
+            throw new AuthError('User not found', 'AUTH_USER_NOT_FOUND');
+        }
+
         if (!user.isActive) {
             throw new AuthError('Account is deactivated', 'AUTH_ACCOUNT_DEACTIVATED');
         }
 
-        // Check premium status
-        const isPremium = await userRepository.hasPremiumAccess(user.id);
-
-        // Generate tokens
-        const refreshToken = generateRefreshToken({
-            userId: user.id,
-            sessionId: '', // Will be set after session creation
-        });
-
-        // Calculate expiration
-        const expiresAt = new Date(Date.now() + getRefreshTokenExpiresIn() * 1000);
-
-        // Create session
-        const session = await sessionRepository.create({
-            userId: user.id,
-            refreshToken,
-            expiresAt,
-        });
-
-        // Generate access token with session ID
-        const accessToken = generateAccessToken({
-            userId: user.id,
-            sessionId: session.id,
-            isPremium,
-        });
-
-        // Generate new refresh token with session ID
-        const finalRefreshToken = generateRefreshToken({
-            userId: user.id,
-            sessionId: session.id,
-        });
-
-        // Update session with correct refresh token
-        await sessionRepository.updateRefreshToken(session.id, finalRefreshToken, expiresAt);
-
-        return {
-            accessToken,
-            refreshToken: finalRefreshToken,
-            expiresIn: getAccessTokenExpiresIn(),
-            user: {
-                id: user.id,
-                email: user.email,
-                phone: user.phone,
-                name: user.name,
-                onboardingCompleted: user.onboardingCompleted,
-                goalsSet: user.goalsSet,
-            }
-        };
+        return this.createSession(user.id);
     },
 
     /**
-     * Refreshes tokens using a valid refresh token
-     * Implements token rotation - old refresh token is invalidated
+     * STEP 2 — Phone OTP Verification (Signup Flow)
+     * Requires a valid provisional token (enforced by requireProvisionalAuth middleware).
+     * Verifies the OTP, links the phone number, and creates a full session.
+     */
+    async verifyPhone(userId: string, phone: string, otp: string): Promise<TokenPair> {
+        // Dev: mock OTP is 123456
+        if (otp !== '123456') {
+            throw new AuthError('Invalid OTP', 'AUTH_INVALID_OTP');
+        }
+
+        const user = await userRepository.findById(userId);
+        if (!user) {
+            throw new AuthError('User not found', 'AUTH_USER_NOT_FOUND');
+        }
+
+        // Check if phone is already used by ANOTHER user
+        const existingPhoneUser = await userRepository.findByPhone(phone);
+        if (existingPhoneUser && existingPhoneUser.id !== userId) {
+            throw new ConflictError('Phone number already in use', 'AUTH_PHONE_IN_USE');
+        }
+
+        // Link phone and mark as verified
+        await userRepository.update(userId, {
+            phone,
+            isPhoneVerified: true,
+        });
+
+        // Create full session — user is now fully authenticated
+        return this.createSession(userId);
+    },
+
+    /**
+     * Refreshes tokens using a valid refresh token (token rotation)
      */
     async refreshToken(refreshToken: string): Promise<TokenPair> {
-        // Validate the refresh token
         let tokenPayload;
         try {
             tokenPayload = validateRefreshToken(refreshToken);
@@ -215,27 +252,21 @@ export const authService = {
             throw AuthError.refreshTokenInvalid();
         }
 
-        // Find the session
         const session = await sessionRepository.findById(tokenPayload.sessionId);
         if (!session) {
             throw AuthError.refreshTokenInvalid();
         }
 
-        // Verify the refresh token matches the stored hash
         if (!verifyRefreshTokenHash(refreshToken, session.refreshTokenHash)) {
-            // Token doesn't match - possible token reuse attack
-            // Invalidate all sessions for this user as a security measure
             await sessionRepository.deleteAllForUser(session.userId);
             throw AuthError.refreshTokenInvalid();
         }
 
-        // Check if session is expired
         if (session.expiresAt < new Date()) {
             await sessionRepository.delete(session.id);
             throw AuthError.sessionExpired();
         }
 
-        // Get user for premium status
         const user = await userRepository.findById(session.userId);
         if (!user || !user.isActive) {
             await sessionRepository.delete(session.id);
@@ -244,7 +275,6 @@ export const authService = {
 
         const isPremium = await userRepository.hasPremiumAccess(user.id);
 
-        // Generate new tokens (rotation)
         const newRefreshToken = generateRefreshToken({
             userId: session.userId,
             sessionId: session.id,
@@ -256,9 +286,12 @@ export const authService = {
             isPremium,
         });
 
-        // Update session with new refresh token
         const newExpiresAt = new Date(Date.now() + getRefreshTokenExpiresIn() * 1000);
-        await sessionRepository.updateRefreshToken(session.id, newRefreshToken, newExpiresAt);
+        const updatedSession = await sessionRepository.updateRefreshToken(session.id, newRefreshToken, newExpiresAt);
+        if (!updatedSession) {
+            throw AuthError.refreshTokenInvalid();
+        }
+
 
         return {
             accessToken: newAccessToken,
@@ -271,7 +304,9 @@ export const authService = {
                 name: user.name,
                 onboardingCompleted: user.onboardingCompleted,
                 goalsSet: user.goalsSet,
-            }
+                isEmailVerified: user.isEmailVerified,
+                isPhoneVerified: user.isPhoneVerified,
+            },
         };
     },
 
@@ -279,14 +314,10 @@ export const authService = {
      * Logs out a user by invalidating their session
      */
     async logout(userId: string, sessionId: string): Promise<void> {
-        // Verify the session belongs to the user
         const session = await sessionRepository.findById(sessionId);
         if (!session || session.userId !== userId) {
-            // Session doesn't exist or doesn't belong to user
-            // Still return success to prevent information leakage
             return;
         }
-
         await sessionRepository.delete(sessionId);
     },
 
@@ -358,126 +389,6 @@ export const authService = {
     },
 
     /**
-     * Hashes a password for storage
-     */
-    async hashPassword(password: string): Promise<string> {
-        return bcrypt.hash(password, SALT_ROUNDS);
-    },
-
-    /**
-     * Authenticates a user with Google OAuth ID Token
-     */
-    async googleLogin(idToken: string): Promise<TokenPair> {
-        if (!GOOGLE_CLIENT_ID) {
-            throw new AuthError('Google Client ID not configured', 'AUTH_CONFIG_ERROR', 500);
-        }
-
-        let payload;
-        try {
-            const ticket = await googleClient.verifyIdToken({
-                idToken,
-                audience: GOOGLE_CLIENT_ID,
-            });
-            payload = ticket.getPayload();
-        } catch (error) {
-            throw new AuthError('Invalid Google token', 'AUTH_INVALID_TOKEN');
-        }
-
-        if (!payload || !payload.email) {
-            throw new AuthError('Google token missing email', 'AUTH_INVALID_TOKEN');
-        }
-
-        const email = payload.email.toLowerCase();
-        let user = await userRepository.findByEmail(email);
-
-        if (!user) {
-            // Create user for first-time Google login
-            const trialEndsAt = new Date();
-            trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DURATION_DAYS);
-
-            user = await prisma.$transaction(async (tx) => {
-                const newUser = await tx.user.create({
-                    data: {
-                        email,
-                        passwordHash: await bcrypt.hash(Math.random().toString(36), SALT_ROUNDS),
-                        role: 'USER',
-                        plan: 'TRIAL',
-                        trialEndsAt,
-                        name: payload?.name || null,
-                        isEmailVerified: true,
-                    },
-                });
-
-                await tx.consent.create({
-                    data: {
-                        userId: newUser.id,
-                        termsAccepted: true,
-                        privacyAccepted: true,
-                        recordingAccepted: true,
-                    },
-                });
-
-                return newUser;
-            });
-        } else if (!user.isEmailVerified) {
-            // Update existing user if email wasn't verified
-            user = await userRepository.update(user.id, { isEmailVerified: true });
-        }
-
-        return this.createSession(user.id);
-    },
-
-    /**
-     * Authenticates a user with Phone and Mock OTP
-     */
-    async phoneLogin(phone: string, otp: string): Promise<TokenPair> {
-        if (otp !== '123456') {
-            throw new AuthError('Invalid OTP', 'AUTH_INVALID_OTP');
-        }
-
-        let user = await userRepository.findByPhone(phone);
-
-        if (!user) {
-            // Create user for first-time Phone login
-            const trialEndsAt = new Date();
-            trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DURATION_DAYS);
-
-            user = await prisma.$transaction(async (tx) => {
-                const newUser = await tx.user.create({
-                    data: {
-                        email: `user_${Date.now()}@example.com`, // Temporary email
-                        phone,
-                        passwordHash: await bcrypt.hash(Math.random().toString(36), SALT_ROUNDS),
-                        role: 'USER',
-                        plan: 'TRIAL',
-                        trialEndsAt,
-                        isPhoneVerified: true,
-                    },
-                });
-
-                await tx.consent.create({
-                    data: {
-                        userId: newUser.id,
-                        termsAccepted: true,
-                        privacyAccepted: true,
-                        recordingAccepted: true,
-                    },
-                });
-                return newUser;
-            });
-        } else if (!user.isPhoneVerified) {
-            // Update existing user if phone wasn't verified
-            user = await userRepository.update(user.id, { isPhoneVerified: true });
-        }
-
-        if (!user) {
-            throw new AuthError('Failed to create or update user', 'AUTH_USER_ERROR');
-        }
-
-        return this.createSession(user.id);
-    },
-
-    /**
      * Helper to create a session and return tokens
      */
     async createSession(userId: string): Promise<TokenPair> {
@@ -507,12 +418,18 @@ export const authService = {
             isPremium,
         });
 
+        console.log(`[AuthService] Session created successfully. SessionID: ${session.id}, UserID: ${user.id}`);
+
         const finalRefreshToken = generateRefreshToken({
             userId: user.id,
             sessionId: session.id,
         });
 
-        await sessionRepository.updateRefreshToken(session.id, finalRefreshToken, expiresAt);
+        const updatedSession = await sessionRepository.updateRefreshToken(session.id, finalRefreshToken, expiresAt);
+        if (!updatedSession) {
+            throw new AuthError('Session synchronization error', 'AUTH_SESSION_ERROR', 500);
+        }
+
 
         return {
             accessToken,
@@ -527,14 +444,183 @@ export const authService = {
                 goalsSet: user.goalsSet,
                 isEmailVerified: user.isEmailVerified,
                 isPhoneVerified: user.isPhoneVerified,
-            }
+            },
         };
     },
 
     /**
-     * Verifies a password against a hash
+     * Admin-only: login with email and password (kept for admin panel access)
+     * This is NOT part of the user signup flow.
      */
-    async verifyPassword(password: string, hash: string): Promise<boolean> {
-        return bcrypt.compare(password, hash);
+    async login(credentials: LoginCredentials): Promise<TokenPair> {
+        const { email, password } = credentials;
+
+        const user = await userRepository.findByEmail(email);
+        if (!user) {
+            throw AuthError.invalidCredentials();
+        }
+
+        const isValidPassword = await bcrypt.compare(password, user.passwordHash);
+        if (!isValidPassword) {
+            throw AuthError.invalidCredentials();
+        }
+
+        if (!user.isActive) {
+            throw new AuthError('Account is deactivated', 'AUTH_ACCOUNT_DEACTIVATED');
+        }
+
+        return this.createSession(user.id);
+    },
+
+    /**
+     * Firebase Phone Login
+     * Verifies the Firebase ID token, creates the user if new (with placeholder email),
+     * and returns a full TokenPair.
+     */
+    async firebasePhoneLogin(idToken: string): Promise<TokenPair> {
+        console.log('[AuthService] Initiating Firebase Phone Login');
+
+        let decodedToken;
+        try {
+            decodedToken = await firebaseAdmin.auth().verifyIdToken(idToken);
+            console.log(`[AuthService] Firebase token verified for phone: ${decodedToken.phone_number}`);
+        } catch (err: any) {
+            console.error('[AuthService] Firebase verification failed:', err.message);
+            throw new AuthError('Invalid Firebase token', 'AUTH_INVALID_TOKEN');
+        }
+
+        const phone = decodedToken.phone_number;
+        if (!phone) {
+            throw new AuthError('Firebase token missing phone number', 'AUTH_INVALID_TOKEN');
+        }
+
+        // Try finding by phone number
+        let user = await userRepository.findByPhone(phone);
+
+        if (!user) {
+            console.warn(`[AuthService] Login failed: Phone ${phone} not registered.`);
+            throw new AuthError('Account not found. Please sign up via Google first.', 'AUTH_USER_NOT_FOUND', 404);
+        }
+
+        if (!user.isActive) {
+            console.warn(`[AuthService] Deactivated user attempted login: ${phone}`);
+            throw new AuthError('Account is deactivated', 'AUTH_ACCOUNT_DEACTIVATED');
+        }
+
+        // Ensure mark as verified if found but not marked (e.g., if manually entered but not verified)
+        if (!user.isPhoneVerified) {
+            console.log(`[AuthService] Mark existing user ${phone} as phone verified`);
+            user = await userRepository.update(user.id, { isPhoneVerified: true });
+        }
+
+        console.log(`[AuthService] User logged in by phone: ${user.email}`);
+        return this.createSession(user.id);
+    },
+
+    /**
+     * Firebase Phone Verification (Step 2 of Signup)
+     * Links a verified Firebase phone number to a user who started signup via Google.
+     */
+    async firebasePhoneVerify(userId: string, idToken: string): Promise<TokenPair> {
+        console.log(`[AuthService] Initiating Phone Verification for UID: ${userId}`);
+
+        let decodedToken;
+        try {
+            decodedToken = await firebaseAdmin.auth().verifyIdToken(idToken);
+        } catch (err: any) {
+            console.error('[AuthService] Firebase verification failed:', err.message);
+            throw new AuthError('Invalid Firebase token', 'AUTH_INVALID_TOKEN');
+        }
+
+        const phone = decodedToken.phone_number;
+        if (!phone) {
+            throw new AuthError('Firebase token missing phone number', 'AUTH_INVALID_TOKEN');
+        }
+
+        const user = await userRepository.findById(userId);
+        if (!user) {
+            throw new AuthError('User not found', 'AUTH_USER_NOT_FOUND');
+        }
+
+        // Check if phone is already used by ANOTHER user
+        const existingPhoneUser = await userRepository.findByPhone(phone);
+        if (existingPhoneUser && existingPhoneUser.id !== userId) {
+            throw new ConflictError('Phone number already in use by another account', 'AUTH_PHONE_IN_USE');
+        }
+
+        // Link phone and mark as verified
+        await userRepository.update(userId, {
+            phone,
+            isPhoneVerified: true,
+        });
+
+        console.log(`[AuthService] Phone ${phone} linked to UID: ${userId}`);
+        return this.createSession(userId);
+    },
+
+    /**
+     * Mock OTP Verification
+     * Auto-creates user if not found. Only for testing.
+     */
+    async mockVerifyOtp(phone: string): Promise<TokenPair> {
+        let user = await userRepository.findByPhone(phone);
+
+        if (!user) {
+            const trialEndsAt = new Date();
+            trialEndsAt.setDate(trialEndsAt.getDate() + TRIAL_DURATION_DAYS);
+
+            user = await prisma.$transaction(async (tx) => {
+                const newUser = await tx.user.create({
+                    data: {
+                        email: `mock_${Date.now()}@example.com`,
+                        phone,
+                        passwordHash: await bcrypt.hash(Math.random().toString(36), SALT_ROUNDS),
+                        role: 'USER',
+                        plan: 'TRIAL',
+                        trialEndsAt,
+                        isPhoneVerified: true,
+                    },
+                });
+
+                await tx.consent.create({
+                    data: {
+                        userId: newUser.id,
+                        termsAccepted: true,
+                        privacyAccepted: true,
+                        recordingAccepted: true,
+                    },
+                });
+
+                return newUser;
+            });
+            console.log(`[AuthService] Mock user created: ${phone}`);
+        } else if (!user.isPhoneVerified) {
+            user = await userRepository.update(user.id, { isPhoneVerified: true });
+        }
+
+        if (!user.isActive) {
+            throw new AuthError('Account is deactivated', 'AUTH_ACCOUNT_DEACTIVATED');
+        }
+
+        return this.createSession(user.id);
+    },
+
+    /**
+     * Fallback login — directly issue tokens for a phone number for testing.
+     * ONLY FOR DEV/TEST ENVIRONMENTS.
+     */
+    async loginFallback(phone: string): Promise<TokenPair> {
+        const user = await userRepository.findByPhone(phone);
+        if (!user) {
+            throw new AuthError('User not found with this phone number', 'AUTH_USER_NOT_FOUND');
+        }
+
+        if (!user.isActive) {
+            throw new AuthError('Account is deactivated', 'AUTH_ACCOUNT_DEACTIVATED');
+        }
+
+        return this.createSession(user.id);
     },
 };
+
+

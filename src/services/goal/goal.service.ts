@@ -1,28 +1,71 @@
-import { goalRepository, type GoalData } from '../../repositories/goal.repository';
+import { goalRepository, type GoalData, type CreateGoalInput as RepoCreateInput } from '../../repositories/goal.repository';
+import { openaiService } from '../ai/openai.service';
 
 export interface CreateGoalInput {
     type: string;
     content: string;
+    deadline?: string;
+    isAutomated?: boolean;
+    targetValue?: string;
+    templateKey?: string;
 }
 
 export const goalService = {
     async createGoal(userId: string, input: CreateGoalInput): Promise<GoalData> {
+        const deadline = input.deadline ? new Date(input.deadline) : undefined;
+        const affirmation = await openaiService.generateGoalAffirmation(input.content, deadline);
+
         return goalRepository.create({
             userId,
-            ...input
+            ...input,
+            deadline,
+            affirmation,
         });
     },
 
+    async updateCategoryGoals(userId: string, type: string, goals: Omit<CreateGoalInput, 'type'>[]): Promise<GoalData[]> {
+        const goalsWithAffirmations = await Promise.all(
+            goals.map(async (g) => {
+                const deadline = g.deadline ? new Date(g.deadline) : undefined;
+                const affirmation = await openaiService.generateGoalAffirmation(g.content, deadline);
+                return {
+                    ...g,
+                    deadline,
+                    affirmation,
+                };
+            })
+        );
+
+        return goalRepository.overwriteCategoryGoals(
+            userId,
+            type,
+            goalsWithAffirmations
+        );
+    },
+
     async getUserGoals(userId: string): Promise<GoalData[]> {
-        return goalRepository.findByUserId(userId);
+        console.log(`[GoalService] Finding goals in repo for user: ${userId}`);
+        const result = await goalRepository.findByUserId(userId);
+        console.log(`[GoalService] Repo returned ${result.length} goals.`);
+        return result;
     },
 
-    async updateGoal(id: string, userId: string, content: string): Promise<GoalData> {
-        // Basic ownership check can be added here or in middleware
-        return goalRepository.update(id, content);
+    async getAllGoals(): Promise<GoalData[]> {
+        return goalRepository.findAll();
     },
 
-    async deleteGoal(id: string, userId: string): Promise<GoalData> {
+    async updateGoal(id: string, _userId: string, content: string): Promise<GoalData> {
+        // Since content changed, we should regenerate the affirmation
+        // Note: Repository update currently only updates content. We need to update it to support affirmation.
+        const existingGoals = await goalRepository.findAll(); // This is inefficient but keep it simple for now
+        const goal = existingGoals.find(g => g.id === id);
+
+        const affirmation = await openaiService.generateGoalAffirmation(content, goal?.deadline || undefined);
+
+        return goalRepository.update(id, content, affirmation);
+    },
+
+    async deleteGoal(id: string, _userId: string): Promise<GoalData> {
         return goalRepository.delete(id);
     },
 };

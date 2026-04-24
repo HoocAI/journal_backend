@@ -5,7 +5,8 @@ import { journalService } from '../services/journal';
 import { requireAuth } from '../middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 import { ValidationError, UploadError } from '../utils/errors';
-import { journalUpload } from '../utils/upload';
+import { journalUpload, generateFilename } from '../utils/upload';
+import { uploadFileToS3 } from '../utils/s3';
 
 const router = Router();
 
@@ -29,18 +30,33 @@ router.post(
         }
 
         const files = req.files as { photo?: Express.Multer.File[], audio?: Express.Multer.File[] } | undefined;
+        const userId = req.user!.userId;
 
-        const photoUrl = files?.photo?.[0]
-            ? `/uploads/journal/photo/${files.photo[0].filename}`
-            : undefined;
-        const audioUrl = files?.audio?.[0]
-            ? `/uploads/journal/audio/${files.audio[0].filename}`
-            : undefined;
+        let photoUrl: string | undefined;
+        let photoS3Key: string | undefined;
+        let audioUrl: string | undefined;
+        let audioS3Key: string | undefined;
 
-        const entry = await journalService.createEntry(req.user!.userId, {
+        if (files?.photo?.[0]) {
+            const file = files.photo[0];
+            const filename = generateFilename(userId, file.originalname);
+            photoS3Key = `journal/photo/${userId}/${filename}`;
+            photoUrl = await uploadFileToS3(file.buffer, photoS3Key, file.mimetype);
+        }
+
+        if (files?.audio?.[0]) {
+            const file = files.audio[0];
+            const filename = generateFilename(userId, file.originalname);
+            audioS3Key = `journal/audio/${userId}/${filename}`;
+            audioUrl = await uploadFileToS3(file.buffer, audioS3Key, file.mimetype);
+        }
+
+        const entry = await journalService.createEntry(userId, {
             content: parseResult.data.content,
             photoUrl,
-            audioUrl
+            photoS3Key,
+            audioUrl,
+            audioS3Key
         });
 
         res.status(201).json(entry);
@@ -85,18 +101,33 @@ router.patch(
         }
 
         const files = req.files as { photo?: Express.Multer.File[], audio?: Express.Multer.File[] } | undefined;
+        const userId = req.user!.userId;
 
-        const photoUrl = files?.photo?.[0]
-            ? `/uploads/journal/photo/${files.photo[0].filename}`
-            : undefined;
-        const audioUrl = files?.audio?.[0]
-            ? `/uploads/journal/audio/${files.audio[0].filename}`
-            : undefined;
+        let photoUrl: string | undefined;
+        let photoS3Key: string | undefined;
+        let audioUrl: string | undefined;
+        let audioS3Key: string | undefined;
 
-        const entry = await journalService.updateEntry(req.params.id as string, req.user!.userId, {
+        if (files?.photo?.[0]) {
+            const file = files.photo[0];
+            const filename = generateFilename(userId, file.originalname);
+            photoS3Key = `journal/photo/${userId}/${filename}`;
+            photoUrl = await uploadFileToS3(file.buffer, photoS3Key, file.mimetype);
+        }
+
+        if (files?.audio?.[0]) {
+            const file = files.audio[0];
+            const filename = generateFilename(userId, file.originalname);
+            audioS3Key = `journal/audio/${userId}/${filename}`;
+            audioUrl = await uploadFileToS3(file.buffer, audioS3Key, file.mimetype);
+        }
+
+        const entry = await journalService.updateEntry(req.params.id as string, userId, {
             ...parseResult.data,
             photoUrl,
-            audioUrl
+            photoS3Key,
+            audioUrl,
+            audioS3Key
         });
 
         res.status(200).json(entry);
