@@ -14,7 +14,7 @@ export const openaiService = {
      * @returns A string containing the affirmation
      */
     async generateGoalAffirmation(goalContent: string, deadline?: Date): Promise<string> {
-        const dateStr = deadline 
+        const dateStr = deadline
             ? deadline.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
             : '';
 
@@ -62,14 +62,14 @@ Return ONLY a valid JSON array containing exactly 5 string affirmations. Do not 
                     console.warn("AI returned malformed JSON, returning raw string.");
                 }
             }
-            
-            const fallback = deadline 
+
+            const fallback = deadline
                 ? `I have achieved ${goalContent} by ${dateStr}`
                 : `I have successfully achieved ${goalContent}`;
             return JSON.stringify(Array(5).fill(fallback));
         } catch (error) {
             console.error('Error generating affirmation with OpenAI:', error);
-            const fallback = deadline 
+            const fallback = deadline
                 ? `I have achieved ${goalContent} by ${dateStr}`
                 : `I have successfully achieved ${goalContent}`;
             return JSON.stringify(Array(5).fill(fallback));
