@@ -1,6 +1,8 @@
 import { MoodType } from '@prisma/client';
-import { ConflictError } from '../../utils/errors';
+import { NotFoundError } from '../../utils/errors';
 import { moodRepository } from '../../repositories/mood.repository';
+import { userRepository } from '../../repositories';
+import { getCurrentDateInTimezone, isValidTimezone } from '../../utils/date';
 
 export interface CreateMoodInput {
     mood: MoodType;
@@ -11,10 +13,13 @@ export interface CreateMoodInput {
 
 export const moodService = {
     async createEntry(userId: string, input: CreateMoodInput) {
-        const today = new Date();
-        // We will keep the entryDate as today's start of day for analytics,
-        // but since we removed the unique constraint, we allow multiple entries.
-        today.setHours(0, 0, 0, 0);
+        const user = await userRepository.findById(userId);
+        if (!user) {
+            throw new NotFoundError('User not found');
+        }
+
+        const timezone = isValidTimezone(user.timezone ?? '') ? user.timezone! : 'UTC';
+        const today = getCurrentDateInTimezone(timezone);
 
         return moodRepository.create({
             userId,

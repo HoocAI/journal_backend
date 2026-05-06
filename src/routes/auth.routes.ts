@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { authService, adminAuthService } from '../services/auth';
 import { asyncHandler } from '../utils/asyncHandler';
-import { ValidationError, AppError } from '../utils/errors';
+import { ValidationError, AppError, AuthError, ForbiddenError } from '../utils/errors';
 import { requireProvisionalAuth } from '../middleware/auth.middleware';
 
 const router = Router();
@@ -10,7 +10,11 @@ const router = Router();
 // ─── Validation Schemas ───────────────────────────────────────────────────────
 
 const googleLoginSchema = z.object({
-    idToken: z.string().min(1, 'ID Token is required'),
+    idToken: z.string().min(1, 'ID Token is required').optional(),
+    code: z.string().min(1, 'Authorization code is required').optional(),
+    redirectUri: z.string().min(1, 'Redirect URI is required').optional(),
+}).refine((data) => Boolean(data.idToken) !== Boolean(data.code), {
+    message: 'Provide either an ID token or an authorization code',
 });
 
 const firebaseLoginSchema = z.object({
@@ -34,6 +38,12 @@ const adminLoginSchema = z.object({
     email: z.string().email('Invalid email format'),
     password: z.string().min(1, 'Password is required'),
 });
+
+function ensureTestingRoutesAllowed(): void {
+    if (process.env.NODE_ENV === 'production') {
+        throw ForbiddenError.resourceForbidden();
+    }
+}
 
 // ─── Step 1: Google OAuth (Login or Signup) ───────────────────────────────────
 
@@ -62,7 +72,7 @@ router.post(
             throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
         }
 
-        const result = await authService.googleLogin({ idToken: parseResult.data.idToken });
+        const result = await authService.googleLogin(parseResult.data);
         const resolvedId = 'userId' in result ? result.userId : result.user?.id;
         console.log(`[${timestamp}] [AuthRoute] Success: Issue ${'provisionalToken' in result ? 'Provisional' : 'Full Access'} token for UID: ${resolvedId}`);
 
@@ -282,6 +292,8 @@ router.post(
 router.post(
     '/fallback',
     asyncHandler(async (req: Request, res: Response) => {
+        ensureTestingRoutesAllowed();
+
         const schema = z.object({
             phone: z.string().min(10, 'Phone number is required'),
         });
@@ -311,6 +323,8 @@ router.post(
 router.post(
     '/mock/send-otp',
     asyncHandler(async (req: Request, res: Response) => {
+        ensureTestingRoutesAllowed();
+
         const schema = z.object({ phone: z.string().min(10, 'Phone number is required') });
         const parseResult = schema.safeParse(req.body);
         if (!parseResult.success) throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
@@ -328,6 +342,8 @@ router.post(
 router.post(
     '/mock/verify-otp',
     asyncHandler(async (req: Request, res: Response) => {
+        ensureTestingRoutesAllowed();
+
         const schema = z.object({
             phone: z.string().min(10, 'Phone number is required'),
             otp: z.string().length(6, 'OTP must be 6 digits')

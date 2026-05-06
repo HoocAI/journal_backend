@@ -1,5 +1,7 @@
 import { dailyPhotoRepository, userRepository } from '../../repositories';
 import { ConflictError, ForbiddenError, NotFoundError } from '../../utils/errors';
+import { deleteObjectFromS3 } from '../../utils/s3';
+import { getCurrentDateInTimezone, isSameDayInTimezone, isValidTimezone } from '../../utils/date';
 
 export const dailyPhotoService = {
     async uploadPhoto(userId: string, photoData: { url: string; s3Key: string }) {
@@ -12,11 +14,12 @@ export const dailyPhotoService = {
             throw ForbiddenError.accountDisabled();
         }
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const timezone = isValidTimezone(user.timezone ?? '') ? user.timezone! : 'UTC';
+        const today = getCurrentDateInTimezone(timezone);
 
         // Check if photo already exists for today
-        const existing = await dailyPhotoRepository.findForDate(userId, today);
+        const existingPhotos = await dailyPhotoRepository.findByUserId(userId);
+        const existing = existingPhotos.find((photo) => isSameDayInTimezone(photo.date, today, timezone));
         if (existing) {
             // Options: overwrite or throw error. 
             // The prompt says "allows users to upload a new 'best picture of the day', distinct from any previously uploaded images"
@@ -35,9 +38,15 @@ export const dailyPhotoService = {
     },
 
     async getTodayPhoto(userId: string) {
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        return dailyPhotoRepository.findForDate(userId, today);
+        const user = await userRepository.findById(userId);
+        if (!user) {
+            throw new NotFoundError('User not found');
+        }
+
+        const timezone = isValidTimezone(user.timezone ?? '') ? user.timezone! : 'UTC';
+        const today = getCurrentDateInTimezone(timezone);
+        const photos = await dailyPhotoRepository.findByUserId(userId);
+        return photos.find((photo) => isSameDayInTimezone(photo.date, today, timezone)) ?? null;
     },
 
     async getHistory(userId: string) {
@@ -45,7 +54,16 @@ export const dailyPhotoService = {
     },
 
     async deletePhoto(id: string, userId: string) {
-        // Implementation for deleting a photo could be added here
-        return dailyPhotoRepository.delete(id);
+        const existing = await dailyPhotoRepository.findByUserId(userId);
+        const photo = existing.find((item) => item.id === id);
+        if (!photo) {
+            throw new NotFoundError('Photo not found');
+        }
+
+        const deletedPhoto = await dailyPhotoRepository.delete(id);
+        await deleteObjectFromS3(photo.s3Key).catch((error) => {
+            console.error(`Failed to delete daily photo asset ${photo.s3Key}:`, error);
+        });
+        return deletedPhoto;
     }
 };

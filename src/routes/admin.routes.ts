@@ -9,7 +9,7 @@ import { userManagementService } from '../services/admin/user-management.service
 import { adminAudioService } from '../services/admin/admin-audio.service';
 import { adminAudioUpload, ALLOWED_AUDIO_TYPES, generateFilename } from '../utils/upload';
 import { getFirebaseStatus } from '../config/firebase.config';
-import { uploadFileToS3 } from '../utils/s3';
+import { uploadFileToS3, deleteObjectFromS3 } from '../utils/s3';
 import { prisma } from '../lib/prisma';
 
 const router = Router();
@@ -17,6 +17,8 @@ const router = Router();
 // GET /api/v1/admin/diagnostics - Check system status
 router.get(
     '/diagnostics',
+    requireAuth(),
+    requireAdmin(),
     asyncHandler(async (_req: Request, res: Response) => {
         const firebaseStatus = getFirebaseStatus();
 
@@ -175,16 +177,21 @@ router.post(
         const file = req.file;
         const filename = generateFilename(undefined, file.originalname);
         const s3Key = `admin/audio/${filename}`;
-        
-        const audioUrl = await uploadFileToS3(file.buffer, s3Key, file.mimetype);
 
-        const audio = await adminAudioService.createAudio({
-            title: parseResult.data.title,
-            audioUrl,
-            s3Key
-        });
+        try {
+            const audioUrl = await uploadFileToS3(file.buffer, s3Key, file.mimetype);
 
-        res.status(201).json(audio);
+            const audio = await adminAudioService.createAudio({
+                title: parseResult.data.title,
+                audioUrl,
+                s3Key
+            });
+
+            res.status(201).json(audio);
+        } catch (error) {
+            await deleteObjectFromS3(s3Key).catch(() => undefined);
+            throw error;
+        }
     })
 );
 

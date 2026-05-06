@@ -55,12 +55,19 @@ export const authService = {
         try {
             if (code) {
                 // Scenario A: Authorization Code Flow
+                if (!GOOGLE_CLIENT_SECRET) {
+                    throw new AuthError('Google Client Secret not configured', 'AUTH_CONFIG_ERROR', 500);
+                }
+
                 const { tokens } = await googleClient.getToken({
                     code,
                     redirect_uri: redirectUri || 'postmessage' // 'postmessage' is standard for Flutter/Web direct exchange
                 });
+                if (!tokens.id_token) {
+                    throw new AuthError('Google authorization code did not return an ID token', 'AUTH_INVALID_TOKEN');
+                }
                 const ticket = await googleClient.verifyIdToken({
-                    idToken: tokens.id_token!,
+                    idToken: tokens.id_token,
                     audience: GOOGLE_CLIENT_ID,
                 });
                 payload = ticket.getPayload();

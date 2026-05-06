@@ -1,6 +1,7 @@
 import { questionRepository } from '../../repositories/question.repository';
 import { ConflictError, NotFoundError, ValidationError } from '../../utils/errors';
-import { startOfDay } from '../../utils/date';
+import { startOfDay, getCurrentDateInTimezone, isSameDayInTimezone, isValidTimezone } from '../../utils/date';
+import { userRepository } from '../../repositories';
 
 export interface DailyQuestionResponse {
     id: string;
@@ -77,7 +78,13 @@ function normalizePaginationOptions(options?: PaginationOptions): { limit: numbe
 
 export const questionService = {
     async getDailyQuestion(userId: string): Promise<DailyQuestionResponse> {
-        const today = new Date();
+        const user = await userRepository.findById(userId);
+        if (!user) {
+            throw new NotFoundError('User not found');
+        }
+
+        const timezone = isValidTimezone(user.timezone ?? '') ? user.timezone! : 'UTC';
+        const today = getCurrentDateInTimezone(timezone);
 
         // Find the active question set
         const activeSet = await questionRepository.findActiveQuestionSet();
@@ -106,7 +113,8 @@ export const questionService = {
         }
 
         // Check if user has already answered today
-        const existingAnswer = await questionRepository.findAnswerByUserAndDate(userId, today);
+        const existingAnswers = await questionRepository.findAnswersByUserIdWithQuestionText(userId);
+        const existingAnswer = existingAnswers.find((item) => isSameDayInTimezone(item.answerDate, today, timezone));
 
         const response: DailyQuestionResponse = {
             id: question.id,
@@ -135,11 +143,18 @@ export const questionService = {
             );
         }
 
-        const today = new Date();
+        const user = await userRepository.findById(userId);
+        if (!user) {
+            throw new NotFoundError('User not found');
+        }
+
+        const timezone = isValidTimezone(user.timezone ?? '') ? user.timezone! : 'UTC';
+        const today = getCurrentDateInTimezone(timezone);
         const todayStart = startOfDay(today);
 
         // Check if user already answered today
-        const existingAnswer = await questionRepository.findAnswerByUserAndDate(userId, today);
+        const existingAnswers = await questionRepository.findAnswersByUserIdWithQuestionText(userId);
+        const existingAnswer = existingAnswers.find((item) => isSameDayInTimezone(item.answerDate, today, timezone));
         if (existingAnswer) {
             throw new ConflictError(
                 'You have already answered today\'s question',

@@ -1,5 +1,7 @@
 import { journalRepository, userRepository } from '../../repositories';
 import { ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../../utils/errors';
+import { deleteObjectFromS3 } from '../../utils/s3';
+import { getCurrentDateInTimezone, isSameDayInTimezone, isValidTimezone } from '../../utils/date';
 
 export interface CreateJournalInput {
     content: string;
@@ -28,11 +30,12 @@ export const journalService = {
             throw ForbiddenError.accountDisabled();
         }
 
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
+        const timezone = isValidTimezone(user.timezone ?? '') ? user.timezone! : 'UTC';
+        const today = getCurrentDateInTimezone(timezone);
 
         // Check if entry already exists for today
-        const existing = await journalRepository.findByUserIdAndDate(userId, today);
+        const existingEntries = await journalRepository.findByUserId(userId);
+        const existing = existingEntries.find((entry) => isSameDayInTimezone(entry.entryDate, today, timezone));
         if (existing) {
             throw ConflictError.journalEntryExists(today);
         }
@@ -87,6 +90,11 @@ export const journalService = {
     },
 
     async updateEntry(id: string, userId: string, input: UpdateJournalInput) {
+        const user = await userRepository.findById(userId);
+        if (!user) {
+            throw new NotFoundError('User not found');
+        }
+
         const entry = await journalRepository.findById(id);
         if (!entry) {
             throw new NotFoundError('Journal entry not found');
@@ -97,20 +105,42 @@ export const journalService = {
         }
 
         // Enforce immutability: Only allow updates if the entry is from today
-        const today = new Date();
-        today.setHours(0, 0, 0, 0);
-        const entryDate = new Date(entry.entryDate);
-        entryDate.setHours(0, 0, 0, 0);
+        const timezone = isValidTimezone(user.timezone ?? '') ? user.timezone! : 'UTC';
+        const today = getCurrentDateInTimezone(timezone);
 
-        if (entryDate.getTime() !== today.getTime()) {
+        if (!isSameDayInTimezone(entry.entryDate, today, timezone)) {
             throw new ValidationError('Journal entries from previous days cannot be modified');
         }
 
-        return journalRepository.update(id, input);
+        const previousPhotoS3Key = entry.photoS3Key;
+        const previousAudioS3Key = entry.audioS3Key;
+
+        const updatedEntry = await journalRepository.update(id, input);
+
+        if (previousPhotoS3Key && previousPhotoS3Key !== updatedEntry.photoS3Key) {
+            await deleteObjectFromS3(previousPhotoS3Key).catch((error) => {
+                console.error(`Failed to delete old journal photo for entry ${id}:`, error);
+            });
+        }
+
+        if (previousAudioS3Key && previousAudioS3Key !== updatedEntry.audioS3Key) {
+            await deleteObjectFromS3(previousAudioS3Key).catch((error) => {
+                console.error(`Failed to delete old journal audio for entry ${id}:`, error);
+            });
+        }
+
+        return updatedEntry;
     },
 
     async getEntryByDate(userId: string, date: Date) {
-        return journalRepository.findByUserIdAndDate(userId, date);
+        const user = await userRepository.findById(userId);
+        if (!user) {
+            throw new NotFoundError('User not found');
+        }
+
+        const timezone = isValidTimezone(user.timezone ?? '') ? user.timezone! : 'UTC';
+        const entries = await journalRepository.findByUserId(userId);
+        return entries.find((entry) => isSameDayInTimezone(entry.entryDate, date, timezone)) ?? null;
     },
 
     async getAllEntries(userId: string) {

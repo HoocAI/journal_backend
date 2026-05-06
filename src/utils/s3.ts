@@ -1,5 +1,5 @@
 
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl as awsGetSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { UploadError } from './errors';
 
@@ -54,6 +54,29 @@ export async function uploadFileToS3(
     } catch (error: any) {
         console.error('Error uploading to S3:', error);
         throw new UploadError(`Failed to upload file to S3: ${error.message || error.Code || 'Unknown error'}`);
+    }
+}
+
+/**
+ * Deletes a file from S3.
+ */
+export async function deleteObjectFromS3(s3Key: string): Promise<void> {
+    const bucketName = process.env.AWS_BUCKET_NAME;
+
+    if (!bucketName) {
+        throw new Error('AWS_BUCKET_NAME is not defined in environment variables');
+    }
+
+    const command = new DeleteObjectCommand({
+        Bucket: bucketName,
+        Key: s3Key,
+    });
+
+    try {
+        await getS3Client().send(command);
+    } catch (error: any) {
+        console.error('Error deleting from S3:', error);
+        throw new UploadError(`Failed to delete file from S3: ${error.message || error.Code || 'Unknown error'}`);
     }
 }
 

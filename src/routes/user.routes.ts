@@ -6,8 +6,9 @@ import { asyncHandler } from '../utils/asyncHandler';
 import { ValidationError, NotFoundError } from '../utils/errors';
 import { userService } from '../services/auth';
 import { notificationService } from '../services/notification.service';
-import { uploadFileToS3, getSignedUrl } from '../utils/s3';
+import { uploadFileToS3, getSignedUrl, deleteObjectFromS3 } from '../utils/s3';
 import { generateFilename } from '../utils/upload';
+import { isValidTimezone } from '../utils/date';
 
 const router = Router();
 
@@ -15,7 +16,9 @@ const updateProfileSchema = z.object({
     name: z.string().optional(),
     age: z.number().optional(),
     language: z.string().optional(),
-    timezone: z.string().optional(),
+    timezone: z.string().refine((value) => isValidTimezone(value), {
+        message: 'Invalid timezone',
+    }).optional(),
     gender: z.string().optional(),
     focus: z.array(z.string()).optional(),
     onboardingCompleted: z.boolean().optional(),
@@ -78,19 +81,24 @@ router.patch(
         const folder = process.env.AWS_UPLOAD_FOLDER || 'manifest';
         const s3Key = `${folder}/profile/${userId}/${filename}`; // Use configured prefix
  
-        // Upload to S3
-        const publicUrl = await uploadFileToS3(file.buffer, s3Key, file.mimetype);
+        try {
+            // Upload to S3
+            const publicUrl = await uploadFileToS3(file.buffer, s3Key, file.mimetype);
  
-        // Update user profile with the S3 key
-        const user = await userService.updateProfile(userId, {
-            photoS3Key: s3Key,
-            photoUrl: publicUrl, // This will be overwritten by a signed URL in the service if needed
-        });
+            // Update user profile with the S3 key
+            const user = await userService.updateProfile(userId, {
+                photoS3Key: s3Key,
+                photoUrl: publicUrl, // This will be overwritten by a signed URL in the service if needed
+            });
  
-        res.status(200).json({
-            message: 'Profile image updated successfully',
-            photoUrl: user.photoUrl,
-        });
+            res.status(200).json({
+                message: 'Profile image updated successfully',
+                photoUrl: user.photoUrl,
+            });
+        } catch (error) {
+            await deleteObjectFromS3(s3Key).catch(() => undefined);
+            throw error;
+        }
     })
 );
 

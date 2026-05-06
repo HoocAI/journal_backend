@@ -3,7 +3,7 @@ import multer from 'multer';
 import { z } from 'zod';
 import { requireAuth } from '../middleware';
 import { asyncHandler } from '../utils/asyncHandler';
-import { uploadFileToS3, getSignedUrl } from '../utils/s3';
+import { uploadFileToS3, getSignedUrl, deleteObjectFromS3 } from '../utils/s3';
 import { generateFilename } from '../utils/upload';
 import { NotFoundError, ValidationError } from '../utils/errors';
 import { visionBoardRepository } from '../repositories/vision-board.repository';
@@ -104,7 +104,9 @@ router.delete(
             throw new NotFoundError('Board not found');
         }
 
+        const imageKeys = (board.images || []).map((image: any) => image.s3Key).filter(Boolean);
         await visionBoardRepository.deleteBoard(boardId, userId);
+        await Promise.allSettled(imageKeys.map((key: string) => deleteObjectFromS3(key)));
         res.status(204).send();
     })
 );
@@ -155,13 +157,18 @@ router.post(
         const folder = process.env.AWS_UPLOAD_FOLDER || 'manifest';
         const s3Key = `${folder}/${boardId}/${filename}`;
 
-        const url = await uploadFileToS3(file.buffer, s3Key, file.mimetype);
+        try {
+            const url = await uploadFileToS3(file.buffer, s3Key, file.mimetype);
 
-        const image = await visionBoardRepository.addImage(boardId, url, s3Key);
+            const image = await visionBoardRepository.addImage(boardId, url, s3Key);
 
-        // Return the image with a pre-signed URL for immediate viewing
-        const signedUrl = await getSignedUrl(s3Key);
-        res.status(201).json({ ...image, url: signedUrl });
+            // Return the image with a pre-signed URL for immediate viewing
+            const signedUrl = await getSignedUrl(s3Key);
+            res.status(201).json({ ...image, url: signedUrl });
+        } catch (error) {
+            await deleteObjectFromS3(s3Key).catch(() => undefined);
+            throw error;
+        }
     })
 );
 
@@ -186,6 +193,7 @@ router.delete(
         }
 
         await visionBoardRepository.removeImage(imageId);
+        await deleteObjectFromS3(image.s3Key).catch(() => undefined);
         res.status(204).send();
     })
 );

@@ -71,16 +71,22 @@ export const goalRepository = {
         });
     },
 
-    async update(id: string, content: string, affirmation?: string): Promise<GoalData> {
+    async findByIdAndUserId(id: string, userId: string): Promise<GoalData | null> {
+        return prisma.goal.findFirst({
+            where: { id, userId },
+        }) as unknown as Promise<GoalData | null>;
+    },
+
+    async update(id: string, userId: string, content: string, affirmation?: string): Promise<GoalData> {
         return prisma.goal.update({
-            where: { id },
+            where: { id, userId },
             data: { content, affirmation },
         });
     },
 
-    async delete(id: string): Promise<GoalData> {
+    async delete(id: string, userId: string): Promise<GoalData> {
         return prisma.goal.delete({
-            where: { id },
+            where: { id, userId },
         });
     },
 };

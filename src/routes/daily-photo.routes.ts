@@ -3,7 +3,7 @@ import { dailyPhotoService } from '../services/daily-photo';
 import { requireAuth } from '../middleware';
 import { asyncHandler } from '../utils/asyncHandler';
 import { journalPhotoUpload, generateFilename } from '../utils/upload';
-import { uploadFileToS3, getSignedUrl } from '../utils/s3';
+import { uploadFileToS3, getSignedUrl, deleteObjectFromS3 } from '../utils/s3';
 import { ValidationError } from '../utils/errors';
 
 const router = Router();
@@ -24,16 +24,21 @@ router.post(
         const filename = generateFilename(userId, file.originalname);
         const folder = process.env.AWS_UPLOAD_FOLDER || 'manifest';
         const s3Key = `${folder}/daily-photo/${userId}/${filename}`;
-        
-        await uploadFileToS3(file.buffer, s3Key, file.mimetype);
 
-        const dailyPhoto = await dailyPhotoService.uploadPhoto(userId, {
-            url: `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`,
-            s3Key,
-        });
+        try {
+            await uploadFileToS3(file.buffer, s3Key, file.mimetype);
 
-        const signedUrl = await getSignedUrl(s3Key);
-        res.status(201).json({ ...dailyPhoto, url: signedUrl });
+            const dailyPhoto = await dailyPhotoService.uploadPhoto(userId, {
+                url: `https://${process.env.AWS_BUCKET_NAME}.s3.${process.env.AWS_REGION}.amazonaws.com/${s3Key}`,
+                s3Key,
+            });
+
+            const signedUrl = await getSignedUrl(s3Key);
+            res.status(201).json({ ...dailyPhoto, url: signedUrl });
+        } catch (error) {
+            await deleteObjectFromS3(s3Key).catch(() => undefined);
+            throw error;
+        }
     })
 );
 
@@ -70,5 +75,15 @@ router.get(
         res.status(200).json(historyWithSignedUrls);
     })
 );
+
+        // DELETE /api/v1/daily-photo/:id - Delete a daily photo
+        router.delete(
+            '/:id',
+            asyncHandler(async (req: Request, res: Response) => {
+                const userId = req.user!.userId;
+                await dailyPhotoService.deletePhoto(req.params.id as string, userId);
+                res.status(204).send();
+            })
+        );
 
 export { router as dailyPhotoRouter };

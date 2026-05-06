@@ -6,6 +6,7 @@ import dotenv from 'dotenv';
 import crypto from 'crypto';
 import { authRouter, journalRouter, moodRouter, questionRouter, adminRouter, audioRouter, goalRouter, userRouter, visionBoardRouter, quoteRouter, affirmationRouter, assessmentRouter, dailyPhotoRouter, paymentRouter, adminPaymentRouter } from './routes';
 import { AppError } from './utils/errors';
+import { sessionRepository } from './repositories/session.repository';
 
 dotenv.config();
 
@@ -44,6 +45,24 @@ app.use('/api/v1/assessments', assessmentRouter);
 app.use('/api/v1/daily-photo', dailyPhotoRouter);
 app.use('/api/v1/payments', paymentRouter);
 app.use('/api/v1/admin/payments', adminPaymentRouter);
+
+if (process.env.NODE_ENV !== 'test') {
+    const SESSION_CLEANUP_INTERVAL_MS = 60 * 60 * 1000;
+
+    const runSessionCleanup = async () => {
+        try {
+            await sessionRepository.deleteExpired();
+        } catch (error) {
+            console.error('Failed to clean up expired sessions:', error);
+        }
+    };
+
+    void runSessionCleanup();
+    const cleanupTimer = setInterval(() => {
+        void runSessionCleanup();
+    }, SESSION_CLEANUP_INTERVAL_MS);
+    cleanupTimer.unref();
+}
 
 // Global error handler
 app.use((err: any, req: Request, res: Response, _next: NextFunction) => {

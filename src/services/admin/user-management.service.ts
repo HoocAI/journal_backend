@@ -7,6 +7,7 @@ import { NotFoundError, ForbiddenError } from '../../utils/errors';
 import { prisma } from '../../lib/prisma';
 import type { MoodType, Plan } from '@prisma/client';
 import { Role } from '@prisma/client';
+import { deleteObjectFromS3 } from '../../utils/s3';
 
 export interface MoodAggregation {
     VERY_BAD: number;
@@ -157,7 +158,34 @@ export const userManagementService = {
     },
 
     async deleteUser(userId: string): Promise<void> {
-        const user = await userRepository.findById(userId);
+        const user = await prisma.user.findUnique({
+            where: { id: userId },
+            select: {
+                id: true,
+                role: true,
+                photoS3Key: true,
+                journalEntries: {
+                    select: {
+                        photoS3Key: true,
+                        audioS3Key: true,
+                    },
+                },
+                dailyPhotos: {
+                    select: {
+                        s3Key: true,
+                    },
+                },
+                visionBoards: {
+                    select: {
+                        images: {
+                            select: {
+                                s3Key: true,
+                            },
+                        },
+                    },
+                },
+            },
+        });
         if (!user) {
             throw NotFoundError.resource('User', userId);
         }
@@ -166,12 +194,31 @@ export const userManagementService = {
             throw ForbiddenError.cannotDisableAdmin(); // Reusing this for deletion too
         }
 
+        const s3Keys = new Set<string>();
+        if (user.photoS3Key) {
+            s3Keys.add(user.photoS3Key);
+        }
+        for (const entry of user.journalEntries) {
+            if (entry.photoS3Key) s3Keys.add(entry.photoS3Key);
+            if (entry.audioS3Key) s3Keys.add(entry.audioS3Key);
+        }
+        for (const photo of user.dailyPhotos) {
+            if (photo.s3Key) s3Keys.add(photo.s3Key);
+        }
+        for (const board of user.visionBoards) {
+            for (const image of board.images) {
+                if (image.s3Key) s3Keys.add(image.s3Key);
+            }
+        }
+
         // Manually delete records that don't have cascade delete in schema
         await prisma.questionAnswer.deleteMany({
             where: { userId },
         });
 
         await userRepository.deleteById(userId);
+
+        await Promise.allSettled(Array.from(s3Keys).map((key) => deleteObjectFromS3(key)));
     },
 };
 

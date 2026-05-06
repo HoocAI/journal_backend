@@ -1,5 +1,6 @@
 import { goalRepository, type GoalData, type CreateGoalInput as RepoCreateInput } from '../../repositories/goal.repository';
 import { openaiService } from '../ai/openai.service';
+import { NotFoundError } from '../../utils/errors';
 
 export interface CreateGoalInput {
     type: string;
@@ -54,18 +55,23 @@ export const goalService = {
         return goalRepository.findAll();
     },
 
-    async updateGoal(id: string, _userId: string, content: string): Promise<GoalData> {
-        // Since content changed, we should regenerate the affirmation
-        // Note: Repository update currently only updates content. We need to update it to support affirmation.
-        const existingGoals = await goalRepository.findAll(); // This is inefficient but keep it simple for now
-        const goal = existingGoals.find(g => g.id === id);
+    async updateGoal(id: string, userId: string, content: string): Promise<GoalData> {
+        const goal = await goalRepository.findByIdAndUserId(id, userId);
+        if (!goal) {
+            throw new NotFoundError('Goal not found');
+        }
 
         const affirmation = await openaiService.generateGoalAffirmation(content, goal?.deadline || undefined);
 
-        return goalRepository.update(id, content, affirmation);
+        return goalRepository.update(id, userId, content, affirmation);
     },
 
-    async deleteGoal(id: string, _userId: string): Promise<GoalData> {
-        return goalRepository.delete(id);
+    async deleteGoal(id: string, userId: string): Promise<GoalData> {
+        const goal = await goalRepository.findByIdAndUserId(id, userId);
+        if (!goal) {
+            throw new NotFoundError('Goal not found');
+        }
+
+        return goalRepository.delete(id, userId);
     },
 };
