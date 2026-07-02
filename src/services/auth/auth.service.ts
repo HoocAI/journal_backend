@@ -112,7 +112,7 @@ export const authService = {
                         googleId,
                         passwordHash: await bcrypt.hash(Math.random().toString(36), SALT_ROUNDS),
                         role: 'USER',
-                        plan: 'TRIAL',
+                        plan: 'PREMIUM',
                         trialEndsAt,
                         name: payload?.name || null,
                         isEmailVerified: true,
@@ -369,7 +369,7 @@ export const authService = {
         trialEndDate.setDate(trialEndDate.getDate() + TRIAL_DURATION_DAYS);
 
         await userRepository.update(userId, {
-            plan: 'TRIAL',
+            plan: 'PREMIUM',
             trialEndsAt: trialEndDate,
         });
 
@@ -569,7 +569,7 @@ export const authService = {
                         phone,
                         passwordHash: await bcrypt.hash(Math.random().toString(36), SALT_ROUNDS),
                         role: 'USER',
-                        plan: 'TRIAL',
+                        plan: 'PREMIUM',
                         trialEndsAt,
                         isPhoneVerified: true,
                     },

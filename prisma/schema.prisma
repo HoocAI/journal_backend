@@ -13,7 +13,7 @@ model User {
   googleId            String?            @unique
   passwordHash        String
   role                Role               @default(USER)
-  plan                Plan               @default(TRIAL)
+  plan                Plan               @default(PREMIUM)
   trialEndsAt         DateTime?
   isActive            Boolean            @default(true)
   createdAt           DateTime           @default(now())
