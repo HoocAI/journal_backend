@@ -1,5 +1,5 @@
 
-import { S3Client, PutObjectCommand, GetObjectCommand } from '@aws-sdk/client-s3';
+import { S3Client, PutObjectCommand, GetObjectCommand, DeleteObjectCommand } from '@aws-sdk/client-s3';
 import { getSignedUrl as awsGetSignedUrl } from '@aws-sdk/s3-request-presigner';
 import { UploadError } from './errors';
 
@@ -88,5 +88,28 @@ export async function getSignedUrl(
  */
 export async function getSignedUrls(s3Keys: string[]): Promise<string[]> {
     return Promise.all(s3Keys.map((key) => getSignedUrl(key)));
+}
+
+/**
+ * Deletes a file from S3.
+ * @param key The S3 key of the file to delete.
+ */
+export async function deleteFileFromS3(key: string): Promise<void> {
+    const bucketName = process.env.AWS_BUCKET_NAME;
+
+    if (!bucketName) {
+        throw new Error('AWS_BUCKET_NAME is not defined in environment variables');
+    }
+
+    const command = new DeleteObjectCommand({
+        Bucket: bucketName,
+        Key: key,
+    });
+
+    try {
+        await getS3Client().send(command);
+    } catch (error: any) {
+        console.error(`Error deleting file from S3 (Key: ${key}):`, error);
+    }
 }
 

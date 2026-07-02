@@ -3,7 +3,7 @@ import multer from 'multer';
 import { z } from 'zod';
 import { requireAuth } from '../middleware';
 import { asyncHandler } from '../utils/asyncHandler';
-import { uploadFileToS3, getSignedUrl } from '../utils/s3';
+import { uploadFileToS3, getSignedUrl, deleteFileFromS3 } from '../utils/s3';
 import { generateFilename } from '../utils/upload';
 import { NotFoundError, ValidationError } from '../utils/errors';
 import { visionBoardRepository } from '../repositories/vision-board.repository';
@@ -78,6 +78,24 @@ router.patch(
             throw new NotFoundError('Board not found');
         }
 
+        // Validate sections: max 2 images per category/section
+        if (parseResult.data.sections) {
+            const sections = parseResult.data.sections;
+            for (const key in sections) {
+                const section = sections[key];
+                if (section && typeof section === 'object') {
+                    const imageIds = section.imageIds;
+                    if (Array.isArray(imageIds) && imageIds.length > 2) {
+                        throw new ValidationError(`Category "${key}" can have a maximum of 2 images.`);
+                    }
+                    const tiles = section.tiles;
+                    if (Array.isArray(tiles) && tiles.length > 2) {
+                        throw new ValidationError(`Category "${key}" can have a maximum of 2 images.`);
+                    }
+                }
+            }
+        }
+
         const updatedBoard = await visionBoardRepository.updateBoard(boardId, userId, parseResult.data);
         res.status(200).json(updatedBoard);
     })
@@ -99,9 +117,24 @@ router.delete(
         const boardId = req.params['boardId'] as string;
         const userId = req.user!.userId;
 
-        const board = await visionBoardRepository.findBoardByIdAndUser(boardId, userId);
-        if (!board) {
+        const boardWithImages = await visionBoardRepository.getBoardWithImages(boardId, userId);
+        if (!boardWithImages) {
             throw new NotFoundError('Board not found');
+        }
+
+        // Delete all images in the board from S3
+        if (boardWithImages.images && boardWithImages.images.length > 0) {
+            await Promise.all(
+                boardWithImages.images.map(async (img) => {
+                    if (img.s3Key) {
+                        try {
+                            await deleteFileFromS3(img.s3Key);
+                        } catch (err) {
+                            console.error(`[VisionBoard] Failed to delete S3 file for image ${img.id}:`, err);
+                        }
+                    }
+                })
+            );
         }
 
         await visionBoardRepository.deleteBoard(boardId, userId);
@@ -141,9 +174,20 @@ router.post(
         const boardId = req.params['boardId'] as string;
         const userId = req.user!.userId;
 
-        const board = await visionBoardRepository.findBoardByIdAndUser(boardId, userId);
-        if (!board) {
+        const boardWithImages = await visionBoardRepository.getBoardWithImages(boardId, userId);
+        if (!boardWithImages) {
             throw new NotFoundError('Board not found');
+        }
+
+        // Enforce maximum images limit per board: (sectionsCount || 1) * 2
+        const sectionsCount = boardWithImages.sections && typeof boardWithImages.sections === 'object'
+            ? Object.keys(boardWithImages.sections as object).length
+            : 0;
+        const maxImages = (sectionsCount === 0 ? 1 : sectionsCount) * 2;
+
+        const currentCount = boardWithImages.images?.length || 0;
+        if (currentCount >= maxImages) {
+            throw new ValidationError(`This board is limited to a maximum of ${maxImages} images based on your selected categories (max 2 images per category).`);
         }
 
         if (!req.file) {
@@ -183,6 +227,15 @@ router.delete(
         const image = await visionBoardRepository.findImageById(imageId);
         if (!image || image.visionBoardId !== boardId) {
             throw new NotFoundError('Image not found');
+        }
+
+        // Delete the file from S3
+        if (image.s3Key) {
+            try {
+                await deleteFileFromS3(image.s3Key);
+            } catch (err) {
+                console.error(`[VisionBoard] Failed to delete S3 file for image ${imageId}:`, err);
+            }
         }
 
         await visionBoardRepository.removeImage(imageId);
