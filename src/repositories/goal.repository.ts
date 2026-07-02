@@ -83,4 +83,15 @@ export const goalRepository = {
             where: { id },
         });
     },
+
+    async countByUserAndSince(userId: string, since: Date): Promise<number> {
+        return prisma.goal.count({
+            where: {
+                userId,
+                createdAt: {
+                    gte: since,
+                },
+            },
+        });
+    },
 };

@@ -1,5 +1,6 @@
 import { goalRepository, type GoalData, type CreateGoalInput as RepoCreateInput } from '../../repositories/goal.repository';
 import { openaiService } from '../ai/openai.service';
+import { RateLimitError } from '../../utils/errors';
 
 export interface CreateGoalInput {
     type: string;
@@ -12,6 +13,13 @@ export interface CreateGoalInput {
 
 export const goalService = {
     async createGoal(userId: string, input: CreateGoalInput): Promise<GoalData> {
+        // Enforce hourly limit of max 5 goals per user
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        const count = await goalRepository.countByUserAndSince(userId, oneHourAgo);
+        if (count >= 5) {
+            throw RateLimitError.tooManyRequests(3600);
+        }
+
         const deadline = input.deadline ? new Date(input.deadline) : undefined;
         const affirmation = await openaiService.generateGoalAffirmation(input.content, deadline);
 
@@ -24,6 +32,13 @@ export const goalService = {
     },
 
     async updateCategoryGoals(userId: string, type: string, goals: Omit<CreateGoalInput, 'type'>[]): Promise<GoalData[]> {
+        // Enforce hourly limit of max 5 goals per user
+        const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
+        const count = await goalRepository.countByUserAndSince(userId, oneHourAgo);
+        if (count + goals.length > 5) {
+            throw RateLimitError.tooManyRequests(3600);
+        }
+
         const goalsWithAffirmations = await Promise.all(
             goals.map(async (g) => {
                 const deadline = g.deadline ? new Date(g.deadline) : undefined;
