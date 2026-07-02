@@ -2,9 +2,28 @@
 import { OpenAI } from 'openai';
 import "dotenv/config";
 
-const openai = new OpenAI({
-    apiKey: process.env.OPENAI_API_KEY,
-});
+const apiKey = process.env.OPENAI_API_KEY || '';
+const openai = apiKey ? new OpenAI({ apiKey }) : null;
+
+/**
+ * Helper to generate offline fallback affirmations avoiding generic prefixes and duplicate dates
+ */
+function generateFallbackAffirmations(goalContent: string, dateStr: string, deadline?: Date): string {
+    let fallbackText = goalContent.replace(/^(i want to |i will |i need to )/i, '');
+    fallbackText = fallbackText.charAt(0).toUpperCase() + fallbackText.slice(1);
+    
+    if (deadline) {
+        const lowerContent = goalContent.toLowerCase();
+        const lowerDateStr = dateStr.toLowerCase();
+        const hasDate = lowerContent.includes(lowerDateStr) || 
+                        lowerContent.includes(deadline.getFullYear().toString());
+        if (!hasDate) {
+            fallbackText = `${fallbackText} by ${dateStr}`;
+        }
+    }
+    
+    return JSON.stringify(Array(5).fill(fallbackText));
+}
 
 export const openaiService = {
     /**
@@ -17,6 +36,11 @@ export const openaiService = {
         const dateStr = deadline
             ? deadline.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' })
             : '';
+
+        if (!openai) {
+            console.warn('[OpenAI] API key is missing. Using offline fallback for affirmations.');
+            return generateFallbackAffirmations(goalContent, dateStr, deadline);
+        }
 
         const prompt = `
 Convert the following goal (sometimes called a manifestation) into exactly 5 powerful personal affirmations.
@@ -34,7 +58,6 @@ Rules for Good Affirmations:
 
 Return ONLY a valid JSON array containing exactly 5 string affirmations. Do not include markdown formatting like \`\`\`json.
 `.trim();
-
 
         try {
             const response = await openai.chat.completions.create({
@@ -74,38 +97,14 @@ Return ONLY a valid JSON array containing exactly 5 string affirmations. Do not 
                 }
             }
             
-            // Generate clean fallback text without generic prefixes and avoiding duplicate dates
-            let fallbackText = goalContent.replace(/^(i want to |i will |i need to )/i, '');
-            fallbackText = fallbackText.charAt(0).toUpperCase() + fallbackText.slice(1);
-            
-            if (deadline) {
-                const lowerContent = goalContent.toLowerCase();
-                const lowerDateStr = dateStr.toLowerCase();
-                const hasDate = lowerContent.includes(lowerDateStr) || 
-                                lowerContent.includes(deadline.getFullYear().toString());
-                if (!hasDate) {
-                    fallbackText = `${fallbackText} by ${dateStr}`;
-                }
+            return generateFallbackAffirmations(goalContent, dateStr, deadline);
+        } catch (error: any) {
+            if (error?.status === 401 || error?.message?.includes('API key')) {
+                console.warn('[OpenAI] API key is invalid (401). Using offline fallback for affirmations.');
+            } else {
+                console.error('[OpenAI] Failed to generate affirmation:', error?.message || error);
             }
-            
-            return JSON.stringify(Array(5).fill(fallbackText));
-        } catch (error) {
-            console.error('Error generating affirmation with OpenAI:', error);
-            
-            let fallbackText = goalContent.replace(/^(i want to |i will |i need to )/i, '');
-            fallbackText = fallbackText.charAt(0).toUpperCase() + fallbackText.slice(1);
-            
-            if (deadline) {
-                const lowerContent = goalContent.toLowerCase();
-                const lowerDateStr = dateStr.toLowerCase();
-                const hasDate = lowerContent.includes(lowerDateStr) || 
-                                lowerContent.includes(deadline.getFullYear().toString());
-                if (!hasDate) {
-                    fallbackText = `${fallbackText} by ${dateStr}`;
-                }
-            }
-            
-            return JSON.stringify(Array(5).fill(fallbackText));
+            return generateFallbackAffirmations(goalContent, dateStr, deadline);
         }
     }
 };
