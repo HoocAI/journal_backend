@@ -54,7 +54,7 @@ Rules for the Affirmation:
 2. **No Generic Prefix**: Do NOT start the affirmation with the generic phrase "I have achieved" or "I have successfully achieved". Instead, describe the specific state or result directly (e.g., instead of "I have achieved my weight goal", use "I am healthy and weigh my ideal weight").
 3. **Positive**: Focus on the successful outcome and the feeling of achievement.
 4. **Personal**: Use "I" and "My".
-5. **No Date Duplication**: If the Goal content ("${goalContent}") already mentions a date, year, month, or timeframe, do NOT append or repeat the deadline ("${dateStr}") in the affirmation. Only include the deadline if it is not already described in the Goal content.
+5. **Include Deadline**: If a deadline is provided ("${dateStr}"), you MUST explicitly include the deadline date in the affirmation, typically at the end of the sentence (e.g., "by ${dateStr}").
 
 Return ONLY the plain text of the affirmation. Do not wrap it in quotes, JSON, or markdown.
 `.trim();
@@ -75,6 +75,18 @@ Return ONLY the plain text of the affirmation. Do not wrap it in quotes, JSON, o
                 // Clean up any outer quotes or brackets in case AI ignored instruction
                 content = content.replace(/^["'\[]+|["'\]]+$/g, '').trim();
                 if (content.length > 0) {
+                    // Post-processing check: Ensure the date is included if a deadline is present
+                    if (deadline) {
+                        const lowerContent = content.toLowerCase();
+                        const lowerDateStr = dateStr.toLowerCase();
+                        const yearStr = deadline.getFullYear().toString();
+                        if (!lowerContent.includes(lowerDateStr) && !lowerContent.includes(yearStr)) {
+                            if (content.endsWith('.')) {
+                                content = content.slice(0, -1);
+                            }
+                            content = `${content} by ${dateStr}`;
+                        }
+                    }
                     console.log('[OpenAI] Generated affirmation:', content);
                     return content;
                 }
