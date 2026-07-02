@@ -14,7 +14,7 @@ async function main() {
 
     console.log('Created Goal:', JSON.stringify(newGoal, null, 2));
     
-    if (newGoal.affirmation && newGoal.affirmation.includes('I have achieved a promotion')) {
+    if (newGoal.affirmation && newGoal.affirmation.includes('promotion')) {
         console.log('Verification SUCCESS: Affirmation generated correctly.');
     } else {
         console.log('Verification FAILED: Affirmation might be missing or incorrect.');

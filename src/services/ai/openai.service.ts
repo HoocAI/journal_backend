@@ -19,17 +19,18 @@ export const openaiService = {
             : '';
 
         const prompt = `
-Convert the following goal into exactly 5 powerful personal affirmations.
+Convert the following goal (sometimes called a manifestation) into exactly 5 powerful personal affirmations.
 
 Goal: "${goalContent}"
 ${deadline ? `Deadline: ${dateStr}` : 'No specific deadline'}
 
 Rules for Good Affirmations:
 1. **Quantity**: You MUST generate exactly 5 distinct affirmations.
-2. **Present Tense**: Use "I am", "I am now", or "I have" (as if it has already happened). Avoid "I will" or "I want to".
-3. **Positive**: Focus on the successful outcome and the feeling of achievement.
-4. **Personal**: Use "I" and "My".
-5. **Specific**: Include the goal content (e.g., "${goalContent}") and the deadline (${dateStr}) if provided.
+2. **Present Tense**: Use "I am", "I am now", "I feel", "I enjoy", or action verbs (as if it has already happened). Avoid "I will" or "I want to".
+3. **No Generic Prefix**: Do NOT start the affirmations with the generic phrase "I have achieved" or "I have successfully achieved". Instead, describe the specific state or result directly (e.g., instead of "I have achieved my weight goal", use "I am healthy and weigh my ideal weight").
+4. **Positive**: Focus on the successful outcome and the feeling of achievement.
+5. **Personal**: Use "I" and "My".
+6. **No Date Duplication**: If the Goal content ("${goalContent}") already mentions a date, year, month, or timeframe, do NOT append or repeat the deadline ("${dateStr}") in the affirmations. Only include the deadline if it is not already described in the Goal content.
 
 Return ONLY a valid JSON array containing exactly 5 string affirmations. Do not include markdown formatting like \`\`\`json.
 `.trim();
@@ -73,16 +74,38 @@ Return ONLY a valid JSON array containing exactly 5 string affirmations. Do not 
                 }
             }
             
-            const fallback = deadline
-                ? `I have achieved ${goalContent} by ${dateStr}`
-                : `I have successfully achieved ${goalContent}`;
-            return JSON.stringify(Array(5).fill(fallback));
+            // Generate clean fallback text without generic prefixes and avoiding duplicate dates
+            let fallbackText = goalContent.replace(/^(i want to |i will |i need to )/i, '');
+            fallbackText = fallbackText.charAt(0).toUpperCase() + fallbackText.slice(1);
+            
+            if (deadline) {
+                const lowerContent = goalContent.toLowerCase();
+                const lowerDateStr = dateStr.toLowerCase();
+                const hasDate = lowerContent.includes(lowerDateStr) || 
+                                lowerContent.includes(deadline.getFullYear().toString());
+                if (!hasDate) {
+                    fallbackText = `${fallbackText} by ${dateStr}`;
+                }
+            }
+            
+            return JSON.stringify(Array(5).fill(fallbackText));
         } catch (error) {
             console.error('Error generating affirmation with OpenAI:', error);
-            const fallback = deadline
-                ? `I have achieved ${goalContent} by ${dateStr}`
-                : `I have successfully achieved ${goalContent}`;
-            return JSON.stringify(Array(5).fill(fallback));
+            
+            let fallbackText = goalContent.replace(/^(i want to |i will |i need to )/i, '');
+            fallbackText = fallbackText.charAt(0).toUpperCase() + fallbackText.slice(1);
+            
+            if (deadline) {
+                const lowerContent = goalContent.toLowerCase();
+                const lowerDateStr = dateStr.toLowerCase();
+                const hasDate = lowerContent.includes(lowerDateStr) || 
+                                lowerContent.includes(deadline.getFullYear().toString());
+                if (!hasDate) {
+                    fallbackText = `${fallbackText} by ${dateStr}`;
+                }
+            }
+            
+            return JSON.stringify(Array(5).fill(fallbackText));
         }
     }
 };
