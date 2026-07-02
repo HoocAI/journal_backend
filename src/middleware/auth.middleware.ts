@@ -63,11 +63,7 @@ export function requirePremium() {
                 throw AuthError.tokenInvalid();
             }
 
-            const now = new Date();
-            const isPremiumActive =
-                user.plan === 'PREMIUM' ||
-                (user.plan === 'TRIAL' && user.trialEndsAt && user.trialEndsAt > now) ||
-                (user.premiumEndsAt && user.premiumEndsAt > now);
+            const isPremiumActive = true; // Temporary bypass: make all features free
 
             if (!isPremiumActive) {
                 throw ForbiddenError.premiumRequired();
