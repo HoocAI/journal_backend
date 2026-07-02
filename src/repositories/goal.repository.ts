@@ -25,9 +25,51 @@ export interface CreateGoalInput {
     affirmation?: string;
 }
 
+function cleanAffirmation(affirmation: string | null | undefined, deadline?: Date | null): string | null {
+    if (!affirmation) return null;
+    
+    let text = affirmation;
+    // Check if it is a JSON-stringified array from old format
+    if (text.startsWith('[') && text.endsWith(']')) {
+        try {
+            const parsed = JSON.parse(text);
+            if (Array.isArray(parsed) && parsed.length > 0) {
+                text = parsed[0] || '';
+            }
+        } catch (e) {
+            // Ignore parse errors
+        }
+    }
+
+    // Ensure the date is included if a deadline is present
+    if (deadline) {
+        const dateStr = deadline.toLocaleDateString('en-GB', { day: 'numeric', month: 'long', year: 'numeric' });
+        const lowerText = text.toLowerCase();
+        const lowerDateStr = dateStr.toLowerCase();
+        const yearStr = deadline.getFullYear().toString();
+        
+        if (!lowerText.includes(lowerDateStr) && !lowerText.includes(yearStr)) {
+            if (text.endsWith('.')) {
+                text = text.slice(0, -1);
+            }
+            text = `${text} by ${dateStr}`;
+        }
+    }
+    
+    return text;
+}
+
+function mapGoal(goal: any): GoalData {
+    return {
+        ...goal,
+        affirmation: cleanAffirmation(goal.affirmation, goal.deadline),
+    };
+}
+
 export const goalRepository = {
     async create(data: CreateGoalInput): Promise<GoalData> {
-        return prisma.goal.create({ data });
+        const goal = await prisma.goal.create({ data });
+        return mapGoal(goal);
     },
 
     /**
@@ -54,34 +96,38 @@ export const goalRepository = {
                 )
             );
 
-            return createdGoals;
+            return createdGoals.map(mapGoal);
         });
     },
 
     async findByUserId(userId: string): Promise<GoalData[]> {
-        return prisma.goal.findMany({
+        const goals = await prisma.goal.findMany({
             where: { userId },
             orderBy: { createdAt: 'desc' },
         });
+        return goals.map(mapGoal);
     },
 
     async findAll(): Promise<GoalData[]> {
-        return prisma.goal.findMany({
+        const goals = await prisma.goal.findMany({
             orderBy: { createdAt: 'desc' }
         });
+        return goals.map(mapGoal);
     },
 
     async update(id: string, content: string, affirmation?: string): Promise<GoalData> {
-        return prisma.goal.update({
+        const goal = await prisma.goal.update({
             where: { id },
             data: { content, affirmation },
         });
+        return mapGoal(goal);
     },
 
     async delete(id: string): Promise<GoalData> {
-        return prisma.goal.delete({
+        const goal = await prisma.goal.delete({
             where: { id },
         });
+        return mapGoal(goal);
     },
 
     async countByUserAndSince(userId: string, since: Date): Promise<number> {
