@@ -22,6 +22,7 @@ function checkInMemoryLimit(userId: string, incomingCount: number = 1): void {
     timestamps = timestamps.filter(t => t >= oneHourAgo);
     
     if (timestamps.length + incomingCount > 5) {
+        console.warn(`[RateLimit] User ${userId} exceeded hourly limit (In-Memory: ${timestamps.length}, Incoming: ${incomingCount}). Blocked request.`);
         throw RateLimitError.tooManyRequests(3600);
     }
 }
@@ -41,6 +42,8 @@ function registerInMemoryCreation(userId: string, incomingCount: number = 1): vo
 
 export const goalService = {
     async createGoal(userId: string, input: CreateGoalInput): Promise<GoalData> {
+        console.log(`[GoalService] Request to create goal for user ${userId}:`, JSON.stringify(input));
+
         // 1. Synchronously check in-memory limit to prevent concurrent loop race conditions
         checkInMemoryLimit(userId, 1);
 
@@ -48,6 +51,7 @@ export const goalService = {
         const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
         const count = await goalRepository.countByUserAndSince(userId, oneHourAgo);
         if (count >= 5) {
+            console.warn(`[RateLimit] User ${userId} exceeded hourly limit (DB Count: ${count}). Blocked request.`);
             throw RateLimitError.tooManyRequests(3600);
         }
 
@@ -66,6 +70,8 @@ export const goalService = {
     },
 
     async updateCategoryGoals(userId: string, type: string, goals: Omit<CreateGoalInput, 'type'>[]): Promise<GoalData[]> {
+        console.log(`[GoalService] Request to overwrite category '${type}' goals for user ${userId}:`, JSON.stringify(goals));
+
         // 1. Synchronously check in-memory limit
         checkInMemoryLimit(userId, goals.length);
 
@@ -73,6 +79,7 @@ export const goalService = {
         const oneHourAgo = new Date(Date.now() - 60 * 60 * 1000);
         const count = await goalRepository.countByUserAndSince(userId, oneHourAgo);
         if (count + goals.length > 5) {
+            console.warn(`[RateLimit] User ${userId} exceeded hourly limit (DB Count: ${count}, Incoming: ${goals.length}). Blocked request.`);
             throw RateLimitError.tooManyRequests(3600);
         }
 
