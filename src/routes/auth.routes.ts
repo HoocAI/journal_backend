@@ -2,7 +2,7 @@ import { Router, Request, Response } from 'express';
 import { z } from 'zod';
 import { authService, adminAuthService } from '../services/auth';
 import { asyncHandler } from '../utils/asyncHandler';
-import { ValidationError, AppError } from '../utils/errors';
+import { ValidationError, AppError, AuthError } from '../utils/errors';
 import { requireProvisionalAuth } from '../middleware/auth.middleware';
 
 const router = Router();
