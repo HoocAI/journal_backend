@@ -140,6 +140,7 @@ export const userRepository = {
 
     /**
      * Checks if a user has premium access (active trial or premium plan)
+     * Temporary bypass: always returns true for active users.
      */
     async hasPremiumAccess(userId: string): Promise<boolean> {
         const user = await prisma.user.findUnique({
@@ -148,23 +149,7 @@ export const userRepository = {
 
         if (!user || !user.isActive) return false;
 
-        // Admins always have premium access
-        if (user.role === 'ADMIN') return true;
-
-        // Premium plan always has access
-        if (user.plan === 'PREMIUM') return true;
-
-        // Trial plan has access if trial hasn't expired
-        if (user.plan === 'TRIAL' && user.trialEndsAt) {
-            return user.trialEndsAt > new Date();
-        }
-
-        // Check monthwise premium expiry
-        if (user.premiumEndsAt) {
-            return user.premiumEndsAt > new Date();
-        }
-
-        return false;
+        return true;
     },
 
     /**

@@ -337,6 +337,7 @@ export const authService = {
 
     /**
      * Checks premium access status for a user
+     * Temporary bypass: always returns isPremium as true.
      */
     async checkPremiumAccess(userId: string): Promise<PremiumStatus> {
         const user = await userRepository.findById(userId);
@@ -344,15 +345,7 @@ export const authService = {
             return { isPremium: false, source: 'none', expiresAt: null };
         }
 
-        if (user.plan === 'PREMIUM') {
-            return { isPremium: true, source: 'subscription', expiresAt: null };
-        }
-
-        if (user.plan === 'TRIAL' && user.trialEndsAt && user.trialEndsAt > new Date()) {
-            return { isPremium: true, source: 'trial', expiresAt: user.trialEndsAt };
-        }
-
-        return { isPremium: false, source: 'none', expiresAt: null };
+        return { isPremium: true, source: 'subscription', expiresAt: null };
     },
 
     /**
