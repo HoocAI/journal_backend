@@ -216,6 +216,33 @@ router.post(
     })
 );
 
+/**
+ * POST /auth/admin/login
+ * Login for admin users.
+ */
+router.post(
+    '/admin/login',
+    asyncHandler(async (req: Request, res: Response) => {
+        const timestamp = new Date().toISOString();
+        console.log(`[${timestamp}] [AuthRoute] Incoming Admin Login Request for: ${req.body.email}`);
+        
+        const parseResult = adminLoginSchema.safeParse(req.body);
+        if (!parseResult.success) {
+            throw ValidationError.invalidInput(parseResult.error.flatten().fieldErrors);
+        }
+
+        const tokenPair = await adminAuthService.login(parseResult.data);
+        console.log(`[${timestamp}] [AuthRoute] Admin login success for: ${parseResult.data.email}`);
+
+        res.status(200).json({
+            accessToken: tokenPair.accessToken,
+            refreshToken: tokenPair.refreshToken,
+            expiresIn: tokenPair.expiresIn,
+            tokenType: 'Bearer',
+        });
+    })
+);
+
 // ─── Token Management ─────────────────────────────────────────────────────────
 
 /**
