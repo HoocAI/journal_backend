@@ -263,7 +263,7 @@ router.post(
         const token = authHeader.substring(7);
 
         try {
-            const { validateAccessToken } = await import('../services/auth/token.utils');
+            const { validateAccessToken } = await import('../services/auth/token.utils.js');
             const payload = validateAccessToken(token);
             await authService.logout(payload.userId, sessionId);
         } catch {

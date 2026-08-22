@@ -1,7 +1,7 @@
 {
     "compilerOptions": {
         "target": "ES2022",
-        "module": "commonjs",
+        "module": "node16",
         "lib": [
             "ES2022"
         ],
@@ -24,11 +24,10 @@
         "declaration": true,
         "declarationMap": true,
         "sourceMap": true,
-        "moduleResolution": "node",
-        "baseUrl": ".",
+        "moduleResolution": "node16",
         "paths": {
             "@generated/*": [
-                "generated/*"
+                "./generated/*"
             ]
         }
     },
